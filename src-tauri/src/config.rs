@@ -273,7 +273,7 @@ pub fn load_office(config_dir: &Path) -> OfficeData {
         .unwrap_or_default();
 
     eprintln!(
-        "[atlas-layer] config {} · {} desks",
+        "[atlas-layer] config {} \u00b7 {} desks",
         config_dir.display(),
         bots.len()
     );
@@ -400,8 +400,228 @@ mod tests {
     #[test]
     fn missing_features_leave_the_office_on() {
         let config: AppConfig =
-            serde_json::from_str(r#"{\"office\":{\"title\":\"Atlas Layer\"}}"#).unwrap();
+            serde_json::from_str(r#"{"office":{"title":"Atlas Layer"}}"#).unwrap();
         assert!(config.features.office);
         assert!(!config.features.filter);
         assert!(!config.features.shared_compute);
     }
+
+    #[test]
+    fn a_switch_keeps_unknown_config_fields() {
+        let mut root = serde_json::json!({
+            "division": "creation",
+            "office": { "title": "Atlas Layer", "note": "keep" },
+            "paths": { "todo": "todo.json" }
+        });
+        set_feature_flag(&mut root, "sharedCompute", true, &FeaturesCfg::default()).unwrap();
+        assert_eq!(root["division"], "creation");
+        assert_eq!(root["office"]["note"], "keep");
+        assert_eq!(root["paths"]["todo"], "todo.json");
+        assert_eq!(root["features"]["office"], true);
+        assert_eq!(root["features"]["filter"], false);
+        assert_eq!(root["features"]["sharedCompute"], true);
+        let config: AppConfig = serde_json::from_value(root).unwrap();
+        assert!(config.features.shared_compute);
+        assert!(config.features.office);
+        assert!(!config.features.filter);
+    }
+
+    #[test]
+    fn legacy_config_carries_toggles_once() {
+        let root = tempfile::tempdir().unwrap();
+        let legacy = root.path().join("atla-office");
+        let fresh = root.path().join("atlas-layer");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(
+            legacy.join("config.json"),
+            r#"{
+  "division": "creation",
+  "features": { "office": false, "filter": true, "sharedCompute": true }
+}
+"#,
+        )
+        .unwrap();
+        fs::write(legacy.join("bots.json"), r#"{"bots":[]}"#).unwrap();
+
+        assert!(migrate_legacy_config(&legacy, &fresh));
+        let carried: Value =
+            serde_json::from_str(&fs::read_to_string(fresh.join("config.json")).unwrap()).unwrap();
+        assert_eq!(carried["division"], "creation");
+        assert_eq!(carried["features"]["office"], false);
+        assert_eq!(carried["features"]["filter"], true);
+        assert_eq!(carried["features"]["sharedCompute"], true);
+        assert_eq!(
+            fs::read_to_string(fresh.join("bots.json")).unwrap(),
+            r#"{"bots":[]}"#
+        );
+
+        fs::write(
+            legacy.join("config.json"),
+            r#"{"features":{"office":true}}"#,
+        )
+        .unwrap();
+        assert!(!migrate_legacy_config(&legacy, &fresh));
+        let still: Value =
+            serde_json::from_str(&fs::read_to_string(fresh.join("config.json")).unwrap()).unwrap();
+        assert_eq!(still["features"]["office"], false);
+    }
+
+    #[test]
+    fn history_stays_on_the_old_folder_until_a_new_one_exists() {
+        let root = tempfile::tempdir().unwrap();
+        let legacy = root.path().join("atla-office").join("history");
+        fs::create_dir_all(&legacy).unwrap();
+        assert_eq!(default_history_dir(root.path()), legacy);
+        let fresh = root.path().join("atlas-layer").join("history");
+        fs::create_dir_all(&fresh).unwrap();
+        assert_eq!(default_history_dir(root.path()), fresh);
+    }
+}
+
+pub fn save_config(path: &Path, root: &Value) -> Result<(), String> {
+    let mut pretty = serde_json::to_string_pretty(root).map_err(|err| err.to_string())?;
+    if !pretty.ends_with('\n') {
+        pretty.push('\n');
+    }
+    crate::todos::atomic_write(path, &pretty)
+}
+
+fn load_bots(path: &Path) -> (Value, Vec<Bot>, bool, Vec<String>) {
+    let seed: Value = serde_json::from_str(SEED_BOTS).expect("embedded bots");
+    let (seed_bots, _) = parse_bots(&seed);
+    if !path.exists() {
+        let pretty = serde_json::to_string_pretty(&seed).unwrap_or_else(|_| SEED_BOTS.to_string());
+        let mut body = pretty;
+        if !body.ends_with('\n') {
+            body.push('\n');
+        }
+        if let Err(err) = fs::write(path, body) {
+            return (
+                seed,
+                seed_bots,
+                false,
+                vec![format!(
+                    "Could not write bots.json ({err}). Showing the seed list."
+                )],
+            );
+        }
+        return (seed, seed_bots, true, Vec::new());
+    }
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(err) => {
+            return (
+                seed,
+                seed_bots,
+                false,
+                vec![format!(
+                    "bots.json could not be read ({err}). Showing the seed list, and the file was not changed."
+                )],
+            );
+        }
+    };
+    let value: Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(err) => {
+            return (
+                seed,
+                seed_bots,
+                false,
+                vec![format!(
+                    "bots.json is not JSON ({err}). Showing the seed list, and the file was not changed."
+                )],
+            );
+        }
+    };
+    let (bots, mut warnings) = parse_bots(&value);
+    if bots.is_empty() {
+        warnings.push(
+            "bots.json has no usable desks. Showing the seed list, and the file was not changed."
+                .into(),
+        );
+        return (seed, seed_bots, false, warnings);
+    }
+    (value, bots, true, warnings)
+}
+
+pub fn resolve_paths(config_dir: &Path, config: &AppConfig) -> ResolvedPaths {
+    let history = if config.paths.history_dir.trim().is_empty() {
+        default_history_dir(&dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")))
+    } else {
+        resolve_against(config_dir, &config.paths.history_dir)
+    };
+    let inbox_file = {
+        let raw = config.paths.inbox_file.trim();
+        if raw.is_empty() {
+            None
+        } else {
+            Some(resolve_against(config_dir, raw))
+        }
+    };
+    ResolvedPaths {
+        todo: resolve_against(config_dir, &config.paths.todo),
+        today: resolve_against(config_dir, &config.paths.today),
+        personality: resolve_against(config_dir, &config.paths.personality),
+        inbox_dir: resolve_against(config_dir, &config.paths.inbox_dir),
+        inbox_file,
+        history,
+    }
+}
+
+pub fn resolve_against(config_dir: &Path, raw: &str) -> PathBuf {
+    let expanded = expand_tilde(raw.trim());
+    if expanded.as_os_str().is_empty() {
+        return config_dir.to_path_buf();
+    }
+    if expanded.is_absolute() {
+        expanded
+    } else {
+        config_dir.join(expanded)
+    }
+}
+
+pub fn expand_tilde(raw: &str) -> PathBuf {
+    if raw == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from(raw));
+    }
+    if let Some(rest) = raw.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(raw)
+}
+
+pub fn ollama_base(config: &AppConfig) -> String {
+    if let Some(host) = env_nonempty("OLLAMA_HOST") {
+        if host.starts_with("http://") || host.starts_with("https://") {
+            return host;
+        }
+        return format!("http://{host}");
+    }
+    config.ollama.base_url.clone()
+}
+
+pub fn relay_url(config: &AppConfig) -> String {
+    if let Some(url) = env_nonempty(&config.relay.url_env) {
+        return url;
+    }
+    config.relay.url.trim().to_string()
+}
+
+pub fn read_prompt(path: &Path) -> Option<String> {
+    let text = fs::read_to_string(path).ok()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.chars().take(32_000).collect())
+    }
+}
+
+pub fn effective_agent<'a>(data: &'a OfficeData, bot: &Bot) -> Option<String> {
+    if let Some(pinned) = bot.pinned_agent() {
+        return Some(pinned.to_string());
+    }
+    data.matched_agents.get(&bot.id).cloned()
+}
