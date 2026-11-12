@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Atlas Layer
+GenericName=Desktop overlay
+Comment=A desktop layer for the work on this machine
+Exec=@BIN@
+Icon=@ICON@
+Terminal=false
+Categories=Utility;Office;
+Keywords=ai;bots;office;ollama;atlas;
+StartupNotify=true
+StartupWMClass=rehab.atlas.layer
