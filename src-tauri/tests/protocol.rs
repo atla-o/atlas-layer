@@ -157,7 +157,7 @@ fn inbox_directory_and_jsonl_follow_the_protocol() {
     std::fs::create_dir_all(&inbox).unwrap();
     std::fs::write(
         inbox.join("one.json"),
-        r#"{"bot":"atlas","text":"The plant is watered.","in_reply_to":"m-1","ts":"2026-11-12T08:00:00Z","note":"keep me"}"#, 
+        r#"{"bot":"atlas","text":"The plant is watered.","in_reply_to":"m-1","ts":"2026-11-12T08:00:00Z","note":"keep me"}"#,
     )
     .unwrap();
     std::fs::write(inbox.join("bad.json"), "{nope").unwrap();
