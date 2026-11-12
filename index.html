@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas Layer</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <div class="brand">
+          <span class="seal" aria-hidden="true">O</span>
+          <div>
+            <h1 id="title">Atlas Layer</h1>
+            <p class="sub">Productive, clean, and earning.</p>
+          </div>
+        </div>
+        <div class="top-side">
+          <p id="banner" class="banner" hidden></p>
+          <button type="button" id="open-settings">Settings</button>
+          <time id="clock" datetime=""></time>
+        </div>
+      </header>
+      <main id="stage">
+        <section id="quiet" class="quiet" hidden>
+          <div class="quiet-card">
+            <p class="kicker">Creation</p>
+            <h2>Office is off</h2>
+            <p>The room is closed. Filter and Shared Compute keep their own switches, and each one can be turned off.</p>
+            <dl id="quiet-readout" class="readout"></dl>
+            <div class="add-row">
+              <button type="button" id="quiet-office-on">Turn office on</button>
+              <button type="button" id="quiet-settings">Settings</button>
+              <button type="button" id="quiet-compute-off">Turn shared compute off</button>
+            </div>
+          </div>
+        </section>
+        <div id="floor">
+          <canvas id="office" width="480" height="276" aria-label="The office. Choose a desk or the whiteboard."></canvas>
+          <p id="floor-note" class="floor-note">Opening the office…</p>
+        </div>
+        <section id="chat" class="panel" hidden aria-labelledby="chat-name">
+          <header class="chat-head">
+            <span id="chat-swatch" class="swatch" aria-hidden="true"></span>
+            <div class="chat-id">
+              <h2 id="chat-name">Desk</h2>
+              <p id="chat-role"></p>
+            </div>
+            <button type="button" id="chat-close">Close</button>
+          </header>
+          <p id="chat-meta" class="chat-meta"></p>
+          <div id="agent-row" class="agent-row" hidden>
+            <label for="agent-select">Agent</label>
+            <select id="agent-select"></select>
+            <button type="button" id="agent-pin">Use this agent</button>
+            <button type="button" id="agent-refresh">Refresh</button>
+          </div>
+          <p id="chat-warning" class="chat-warning" hidden></p>
+          <div id="chat-log" class="log" tabindex="0"></div>
+          <p id="chat-wait" class="wait" hidden>Sent. The reply shows up here when it arrives.</p>
+          <form id="chat-form" class="composer">
+            <label class="sr" for="chat-input">Message</label>
+            <textarea id="chat-input" rows="2" maxlength="8000" placeholder="Write to this desk"></textarea>
+            <button type="submit" id="chat-send">Send</button>
+          </form>
+        </section>
+      </main>
+    </div>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <form id="settings-form" method="dialog">
+        <header class="board-head">
+          <div>
+            <p class="kicker">Creation</p>
+            <h2 id="settings-title">Settings</h2>
+            <p id="settings-lede">One Atlas Layer app. The room, the filter, and shared compute each have a switch.</p>
+          </div>
+          <button type="button" id="settings-close">Close</button>
+        </header>
+        <section class="feature" aria-labelledby="feature-office">
+          <div class="feature-head">
+            <h3 id="feature-office">Office</h3>
+            <button type="button" class="switch" id="toggle-office" role="switch" aria-checked="true">On</button>
+          </div>
+          <p>The room, the desks, and the board. This is what you see when it is on.</p>
+        </section>
+        <section class="feature" aria-labelledby="feature-filter">
+          <div class="feature-head">
+            <h3 id="feature-filter">Filter</h3>
+            <button type="button" class="switch" id="toggle-filter" role="switch" aria-checked="false">Off</button>
+          </div>
+          <p>A filter for harmful and NSFW content. The engine is not in this build.</p>
+          <p id="filter-status" class="status-line"></p>
+        </section>
+        <section class="feature" aria-labelledby="feature-compute">
+          <div class="feature-head">
+            <h3 id="feature-compute">Shared Compute</h3>
+            <button type="button" class="switch" id="toggle-compute" role="switch" aria-checked="false">Off</button>
+          </div>
+          <p>Lend idle compute and earn. It only runs when this machine is idle or plugged in.</p>
+          <dl class="readout">
+            <div><dt>Running</dt><dd id="compute-running">Nothing</dd></div>
+            <div><dt>Contributed</dt><dd id="compute-contributed">0</dd></div>
+            <div><dt>Earned</dt><dd id="compute-earned">0</dd></div>
+          </dl>
+          <p id="compute-status" class="status-line"></p>
+          <button type="button" id="compute-off">Turn off</button>
+        </section>
+      </form>
+    </dialog>
+    <dialog id="board-dialog" aria-labelledby="board-title">
+      <form id="board-form" method="dialog">
+        <header class="board-head">
+          <div>
+            <h2 id="board-title">Whiteboard</h2>
+            <p id="board-focus" hidden></p>
+          </div>
+          <button type="button" id="board-close" value="cancel">Close</button>
+        </header>
+        <ul id="todo-list"></ul>
+        <p id="todo-empty" class="empty" hidden>The board is clear.</p>
+        <p id="todo-error" class="chat-warning" hidden></p>
+        <div class="add-row">
+          <label class="sr" for="todo-input">New item</label>
+          <input id="todo-input" maxlength="240" placeholder="Add to the board" autocomplete="off" />
+          <button type="submit" id="todo-add">Add</button>
+        </div>
+        <p id="todo-path" class="path"></p>
+      </form>
+    </dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

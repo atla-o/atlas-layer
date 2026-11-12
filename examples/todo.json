@@ -1,0 +1,26 @@
+{
+  "updatedFrom": "sample",
+  "room": "atla-office",
+  "items": [
+    {
+      "id": "t1",
+      "text": "Review the morning board",
+      "done": false,
+      "list": "today",
+      "owner": "atlas"
+    },
+    {
+      "id": "t2",
+      "text": "Sketch the product shelf",
+      "done": false,
+      "owner": "products",
+      "note": "keep the unknown fields"
+    },
+    {
+      "id": "t3",
+      "text": "Water the office plant",
+      "done": true,
+      "note": "the fern by the window"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "office": {
+    "title": "Atlas Layer"
+  },
+  "features": {
+    "office": true,
+    "filter": false,
+    "sharedCompute": false
+  },
+  "paths": {
+    "todo": "../todo.json",
+    "today": "../today.json",
+    "personality": "../personality.md",
+    "inboxDir": "inbox",
+    "inboxFile": "",
+    "historyDir": "history"
+  },
+  "ollama": {
+    "baseUrl": "http://127.0.0.1:11439",
+    "model": "qwen3:8b",
+    "echoIfUnavailable": true
+  },
+  "relay": {
+    "url": "",
+    "urlEnv": "ATLAS_LAYER_WEBHOOK_URL",
+    "authEnv": "ATLAS_LAYER_WEBHOOK_AUTH",
+    "authKeyringAccount": "webhook-auth"
+  },
+  "cursor": {
+    "baseUrl": "https://api.cursor.com",
+    "apiKeyEnv": "CURSOR_API_KEY",
+    "apiKeyKeyringAccount": "cursor-api-key",
+    "auth": "bearer",
+    "pollSeconds": 60
+  }
+}

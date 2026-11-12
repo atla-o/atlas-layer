@@ -1,0 +1,106 @@
+{
+  "bots": [
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "role": "Chief of staff",
+      "connector": "relay-webhook",
+      "accent": "#c45c3e",
+      "hair": "#241c17",
+      "accessory": "star"
+    },
+    {
+      "id": "products",
+      "name": "Products",
+      "role": "Product desk",
+      "connector": "relay-webhook",
+      "accent": "#d08a3a",
+      "hair": "#5c3a28",
+      "accessory": "none"
+    },
+    {
+      "id": "consumed",
+      "name": "Consumed",
+      "role": "Reading desk",
+      "connector": "relay-webhook",
+      "accent": "#8d5a3a",
+      "hair": "#3a2a22",
+      "accessory": "cup"
+    },
+    {
+      "id": "creation",
+      "name": "Creation",
+      "role": "Making desk",
+      "connector": "relay-webhook",
+      "accent": "#c47b86",
+      "hair": "#6b3a3a",
+      "accessory": "brush"
+    },
+    {
+      "id": "covenant",
+      "name": "Covenant",
+      "role": "Commitments",
+      "connector": "relay-webhook",
+      "accent": "#6e5a4a",
+      "hair": "#241c18",
+      "accessory": "book"
+    },
+    {
+      "id": "wellness",
+      "name": "Wellness",
+      "role": "Care desk",
+      "connector": "relay-webhook",
+      "accent": "#7f9474",
+      "hair": "#3e5340",
+      "accessory": "leaf"
+    },
+    {
+      "id": "modified",
+      "name": "Modified",
+      "role": "Changes",
+      "connector": "relay-webhook",
+      "accent": "#b86a3a",
+      "hair": "#2a211c",
+      "accessory": "gear"
+    },
+    {
+      "id": "devon",
+      "name": "Devon",
+      "role": "Open desk",
+      "connector": "relay-webhook",
+      "accent": "#4a3b32",
+      "hair": "#1a1412",
+      "accessory": "none"
+    },
+    {
+      "id": "local-atlas",
+      "name": "Local Atlas",
+      "role": "On-device",
+      "connector": "local-ollama",
+      "accent": "#c45c3e",
+      "hair": "#241c17",
+      "accessory": "chip",
+      "model": "qwen3:8b"
+    },
+    {
+      "id": "atlas-site",
+      "name": "Atlas site",
+      "role": "Cursor agent",
+      "connector": "cursor-agents",
+      "accent": "#efe6d6",
+      "hair": "#2a211c",
+      "accessory": "none",
+      "agentId": ""
+    },
+    {
+      "id": "roleplay",
+      "name": "Roleplay",
+      "role": "Cursor agent",
+      "connector": "cursor-agents",
+      "accent": "#a35a62",
+      "hair": "#3a2428",
+      "accessory": "mask",
+      "agentId": ""
+    }
+  ]
+}

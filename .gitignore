@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+src-tauri/target/
+src-tauri/gen/
+.DS_Store
+*.log
+
+# Demo runtime state
+examples/demo/history/
+examples/demo/inbox/
+!examples/demo/inbox/.gitkeep
+
+# Local tool output
+agent-tools/
