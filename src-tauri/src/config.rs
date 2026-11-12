@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn missing_features_leave_the_office_on() {
         let config: AppConfig =
-            serde_json::from_str(r#"{\"office\":{\"title\":\"Atlas Layer\"}}"#).unwrap();
+            serde_json::from_str(r#"{"office":{"title":"Atlas Layer"}}"#).unwrap();
         assert!(config.features.office);
         assert!(!config.features.filter);
         assert!(!config.features.shared_compute);
@@ -441,7 +441,7 @@ mod tests {
 "#,
         )
         .unwrap();
-        fs::write(legacy.join("bots.json"), r#"{\"bots\":[]}"#).unwrap();
+        fs::write(legacy.join("bots.json"), r#"{"bots":[]}"#).unwrap();
 
         assert!(migrate_legacy_config(&legacy, &fresh));
         let carried: Value =
@@ -452,12 +452,12 @@ mod tests {
         assert_eq!(carried["features"]["sharedCompute"], true);
         assert_eq!(
             fs::read_to_string(fresh.join("bots.json")).unwrap(),
-            r#"{\"bots\":[]}"#
+            r#"{"bots":[]}"#
         );
 
         fs::write(
             legacy.join("config.json"),
-            r#"{\"features\":{\"office\":true}}"#,
+            r#"{"features":{"office":true}}"#,
         )
         .unwrap();
         assert!(!migrate_legacy_config(&legacy, &fresh));
