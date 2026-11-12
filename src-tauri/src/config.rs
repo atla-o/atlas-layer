@@ -273,7 +273,7 @@ pub fn load_office(config_dir: &Path) -> OfficeData {
         .unwrap_or_default();
 
     eprintln!(
-        "[atlas-layer] config {} \u{b7} {} desks",
+        "[atlas-layer] config {} · {} desks",
         config_dir.display(),
         bots.len()
     );
@@ -299,3 +299,109 @@ pub fn load_office(config_dir: &Path) -> OfficeData {
         last_board_note: String::new(),
     }
 }
+
+fn load_config(path: &Path, warnings: &mut Vec<String>) -> (AppConfig, Value, bool) {
+    let fallback = || {
+        let root: Value = serde_json::from_str(SEED_CONFIG).expect("embedded config");
+        let config = serde_json::from_value(root.clone()).unwrap_or_default();
+        (config, root)
+    };
+    if !path.exists() {
+        let (config, root) = fallback();
+        let mut body =
+            serde_json::to_string_pretty(&root).unwrap_or_else(|_| SEED_CONFIG.to_string());
+        if !body.ends_with('\n') {
+            body.push('\n');
+        }
+        if let Err(err) = fs::write(path, body) {
+            warnings.push(format!(
+                "Could not write a starter config ({err}). Using defaults in memory."
+            ));
+            return (config, root, false);
+        }
+        return (config, root, true);
+    }
+    match fs::read_to_string(path) {
+        Ok(text) => match serde_json::from_str::<Value>(&text) {
+            Ok(root) => match serde_json::from_value::<AppConfig>(root.clone()) {
+                Ok(config) => (config, root, true),
+                Err(err) => {
+                    warnings.push(format!(
+                        "config.json could not be read ({err}). Using defaults, and the file was not changed."
+                    ));
+                    let (config, root) = fallback();
+                    (config, root, false)
+                }
+            },
+            Err(err) => {
+                warnings.push(format!(
+                    "config.json could not be read ({err}). Using defaults, and the file was not changed."
+                ));
+                let (config, root) = fallback();
+                (config, root, false)
+            }
+        },
+        Err(err) => {
+            warnings.push(format!(
+                "config.json could not be read ({err}). Using defaults."
+            ));
+            let (config, root) = fallback();
+            (config, root, false)
+        }
+    }
+}
+
+pub fn feature_key(name: &str) -> Result<&'static str, String> {
+    match name {
+        "office" => Ok("office"),
+        "filter" => Ok("filter"),
+        "sharedCompute" | "shared-compute" | "compute" => Ok("sharedCompute"),
+        other => Err(format!("Unknown feature {other}.")),
+    }
+}
+
+/// Sets one switch on the raw config document. Other keys, including ones this
+/// app does not know, stay where they are.
+pub fn set_feature_flag(
+    root: &mut Value,
+    feature: &str,
+    enabled: bool,
+    current: &FeaturesCfg,
+) -> Result<(), String> {
+    let key = feature_key(feature)?;
+    if !root.is_object() {
+        *root = serde_json::json!({});
+    }
+    let obj = root.as_object_mut().expect("config object");
+    let features = obj
+        .entry("features")
+        .or_insert_with(|| serde_json::json!({}));
+    if !features.is_object() {
+        *features = serde_json::json!({});
+    }
+    let map = features.as_object_mut().expect("features object");
+    if !map.contains_key("office") {
+        map.insert("office".into(), Value::Bool(current.office));
+    }
+    if !map.contains_key("filter") {
+        map.insert("filter".into(), Value::Bool(current.filter));
+    }
+    if !map.contains_key("sharedCompute") {
+        map.insert("sharedCompute".into(), Value::Bool(current.shared_compute));
+    }
+    map.insert(key.into(), Value::Bool(enabled));
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_features_leave_the_office_on() {
+        let config: AppConfig =
+            serde_json::from_str(r#"{\"office\":{\"title\":\"Atlas Layer\"}}"#).unwrap();
+        assert!(config.features.office);
+        assert!(!config.features.filter);
+        assert!(!config.features.shared_compute);
+    }
