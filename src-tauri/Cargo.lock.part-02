@@ -721,7 +721,7 @@ dependencies = [
 name = "wasm-bindgen-shared"
 version = "0.2.130"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b1f9c3798725016c6d1a4ac0ab1541149c0b9505fde06423b02f5ef0106b9f0"
+checksum = "3b1f9c3798725016c6ee5f2f57869ec0831e8bbc0ab0310a86e787e97f41389e"
 dependencies = [
  "unicode-ident",
 ]
