@@ -1,4 +1,4 @@
-import type { Bot, Todo } from "../types";
+import type { BoardMetric, Bot, Todo } from "../types";
 import { drawText, fitText, textWidth } from "./font";
 
 export const WORLD_W = 480;
@@ -78,6 +78,9 @@ export type SceneFrame = {
   bots: Bot[];
   statuses: Record<string, string>;
   todos: Todo[];
+  metrics: BoardMetric[];
+  updated: string | null;
+  focus: string | null;
   selectedId: string | null;
   frame: number;
 };
@@ -86,7 +89,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: SceneFrame) {
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, WORLD_W, WORLD_H);
   paintRoom(ctx);
-  paintBoard(ctx, scene.todos);
+  paintBoard(ctx, scene);
   const seats = layout(scene.bots.length);
   scene.bots.forEach((bot, index) => {
     const seat = seats[index];
@@ -145,27 +148,75 @@ function paintDecor(ctx: CanvasRenderingContext2D) {
   px(ctx, 30, 230, 8, 8, SAGE);
 }
 
-function paintBoard(ctx: CanvasRenderingContext2D, todos: Todo[]) {
+function paintBoard(ctx: CanvasRenderingContext2D, scene: SceneFrame) {
   const { x, y, w, h } = BOARD;
   px(ctx, x - 3, y - 3, w + 6, h + 6, WOOD_DK);
   px(ctx, x, y, w, h, PAPER);
   px(ctx, x, y + h - 2, w, 2, "#e7dccb");
-  drawText(ctx, "BOARD", x + 6, y + 4, WOOD);
-  const open = todos.filter((item) => !item.done);
-  const lines = (open.length ? open : todos).slice(0, 4);
-  if (lines.length === 0) {
-    drawText(ctx, "THE BOARD IS CLEAR", x + 6, y + 18, SAGE_DK);
+  drawText(ctx, "BOARD", x + 4, y + 3, WOOD);
+  const bottom = y + h - (scene.updated ? 8 : 3);
+  let cursor = y + 11;
+  if (scene.metrics.length) {
+    cursor = paintMetrics(ctx, scene.metrics, x + 4, cursor, w - 8, bottom);
+  } else if (scene.focus) {
+    drawText(ctx, fitText(scene.focus, w - 10), x + 4, cursor, WOOD);
+    cursor += 8;
+  }
+  const open = scene.todos.filter((item) => !item.done);
+  const room = Math.max(0, Math.floor((bottom - cursor) / 8));
+  const shown = (open.length ? open : scene.todos).slice(0, room);
+  if (shown.length === 0 && !scene.metrics.length && !scene.focus) {
+    drawText(ctx, "THE BOARD IS CLEAR", x + 4, y + 18, SAGE_DK);
+  }
+  shown.forEach((item, index) => {
+    const ly = cursor + index * 8;
+    paintTaskDot(ctx, x + 4, ly + 1, item);
+    drawText(ctx, fitText(item.text, w - 16), x + 12, ly, item.done ? "#8a7768" : INK);
+  });
+  if (scene.updated) {
+    drawText(ctx, fitText(scene.updated, w - 8), x + 4, y + h - 7, "#8a7768");
+  }
+}
+
+function paintMetrics(
+  ctx: CanvasRenderingContext2D,
+  metrics: BoardMetric[],
+  x: number,
+  y: number,
+  width: number,
+  bottom: number,
+): number {
+  let cx = x;
+  let cy = y;
+  const rowH = 13;
+  for (const metric of metrics) {
+    const value = fitText(metric.value, width);
+    const label = fitText(metric.label, width);
+    const tile = Math.min(width, Math.max(textWidth(value), textWidth(label)) + 2);
+    if (cx > x && cx + tile > x + width) {
+      cx = x;
+      cy += rowH;
+    }
+    if (cy + 11 > bottom) break;
+    drawText(ctx, value, cx, cy, metric.bad ? TERRA : INK);
+    drawText(ctx, label, cx, cy + 6, WOOD);
+    cx += tile + 4;
+  }
+  return cy + rowH;
+}
+
+function paintTaskDot(ctx: CanvasRenderingContext2D, x: number, y: number, item: Todo) {
+  if (item.done) {
+    px(ctx, x, y, 5, 5, SAGE);
+    px(ctx, x + 1, y + 2, 3, 1, PAPER);
     return;
   }
-  lines.forEach((item, index) => {
-    const ly = y + 16 + index * 8;
-    px(ctx, x + 6, ly + 1, 5, 5, item.done ? SAGE : WOOD_LT);
-    if (item.done) {
-      px(ctx, x + 7, ly + 3, 3, 1, PAPER);
-    }
-    const label = fitText(item.text, w - 22);
-    drawText(ctx, label, x + 14, ly, item.done ? "#8a7768" : INK);
-  });
+  if (item.today) {
+    disc(ctx, x + 2, y + 2, 2, TERRA);
+    return;
+  }
+  disc(ctx, x + 2, y + 2, 2, TERRA);
+  disc(ctx, x + 2, y + 2, 1, PAPER);
 }
 
 function paintPerson(ctx: CanvasRenderingContext2D, seat: Seat, bot: Bot, frame: number) {
