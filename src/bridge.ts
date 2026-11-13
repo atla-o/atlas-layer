@@ -44,6 +44,7 @@ function seedBots(): Bot[] {
     model: "model" in bot ? bot.model : null,
     agentId: "agentId" in bot && bot.agentId ? bot.agentId : "",
     agentPinned: Boolean("agentId" in bot && bot.agentId),
+    links: "links" in bot && bot.links ? bot.links : {},
   }));
 }
 
@@ -383,4 +384,16 @@ function streamPreview(botId: string, messageId: string, reply: string) {
     window.setTimeout(step, 28);
   };
   step();
+}
+
+export async function openExternal(url: string): Promise<void> {
+  if (!inTauri()) {
+    const parsed = new URL(url, window.location.href);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("Only web pages can be opened from the browser preview.");
+    }
+    window.open(parsed.href, "_blank", "noopener");
+    return;
+  }
+  await invoke("open_link", { url });
 }
