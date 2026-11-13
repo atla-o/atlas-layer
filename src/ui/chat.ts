@@ -129,7 +129,7 @@ export class ChatPanel {
       if (!this.messages.some((message) => message.id === user.id)) this.messages.push(user);
       this.renderLog();
       this.onStatus(this.bot.id, "working");
-      if (this.bot.connector === "relay-webhook") this.wait(true);
+      if (this.bot.connector === "relay-webhook" || this.bot.connector === "local-window") this.wait(true);
     } catch (error) {
       this.setWarning(error instanceof Error ? error.message : "The message did not send.");
       input.value = text;
@@ -172,7 +172,9 @@ export class ChatPanel {
     const kind =
       bot.connector === "local-ollama"
         ? `Local model${bot.model ? ` · ${bot.model}` : ""}`
-        : bot.connector === "relay-webhook"
+        : bot.connector === "local-window"
+          ? "Local window"
+          : bot.connector === "relay-webhook"
           ? "Cloud relay"
           : bot.connector === "cursor-agents"
             ? bot.agentId
@@ -210,9 +212,9 @@ export class ChatPanel {
       log.append(empty);
       return;
     }
-    for (const message of this.messages) {
+    for (const { message, depth } of thread(this.messages)) {
       const bubble = document.createElement("article");
-      bubble.className = `bubble ${message.role}`;
+      bubble.className = depth > 0 ? `bubble thread ${message.role}` : `bubble ${message.role}`;
       bubble.textContent = message.text;
       const time = document.createElement("time");
       time.dateTime = message.ts;
@@ -222,7 +224,9 @@ export class ChatPanel {
     }
     log.scrollTop = log.scrollHeight;
     const last = this.messages[this.messages.length - 1];
-    this.wait(Boolean(last && last.role === "user" && this.bot?.connector === "relay-webhook"));
+    const waits =
+      this.bot?.connector === "relay-webhook" || this.bot?.connector === "local-window";
+    this.wait(Boolean(last && last.role === "user" && waits));
   }
 
   private wait(show: boolean) {
@@ -234,6 +238,32 @@ export class ChatPanel {
     node.hidden = !text;
     node.textContent = text;
   }
+}
+
+function thread(messages: ChatMessage[]): { message: ChatMessage; depth: number }[] {
+  const ids = new Set(messages.map((message) => message.id));
+  const children = new Map<string, ChatMessage[]>();
+  const roots: ChatMessage[] = [];
+  for (const message of messages) {
+    const parent = message.inReplyTo;
+    if (parent && parent !== message.id && ids.has(parent)) {
+      const list = children.get(parent) ?? [];
+      list.push(message);
+      children.set(parent, list);
+    } else {
+      roots.push(message);
+    }
+  }
+  const out: { message: ChatMessage; depth: number }[] = [];
+  const seen = new Set<string>();
+  const walk = (message: ChatMessage, depth: number) => {
+    if (seen.has(message.id)) return;
+    seen.add(message.id);
+    out.push({ message, depth });
+    for (const child of children.get(message.id) ?? []) walk(child, Math.min(depth + 1, 4));
+  };
+  for (const root of roots) walk(root, 0);
+  return out;
 }
 
 function clock(iso: string): string {
