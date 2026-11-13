@@ -37,10 +37,9 @@
           </div>
         </section>
         <div id="floor">
-          <canvas id="office" width="480" height="276" aria-label="The office. Choose a desk or the whiteboard."></canvas>
+          <canvas id="office" width="480" height="276" aria-label="The office. Choose a desk, a desk item, or the whiteboard."></canvas>
           <p id="floor-note" class="floor-note">Opening the office…</p>
-        </div>
-        <section id="chat" class="panel" hidden aria-labelledby="chat-name">
+          <section id="chat" class="speech" hidden aria-labelledby="chat-name">
           <header class="chat-head">
             <span id="chat-swatch" class="swatch" aria-hidden="true"></span>
             <div class="chat-id">
@@ -64,7 +63,8 @@
             <textarea id="chat-input" rows="2" maxlength="8000" placeholder="Write to this desk"></textarea>
             <button type="submit" id="chat-send">Send</button>
           </form>
-        </section>
+          </section>
+        </div>
       </main>
     </div>
     <dialog id="settings-dialog" aria-labelledby="settings-title">
