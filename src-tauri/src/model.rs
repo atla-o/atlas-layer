@@ -27,6 +27,18 @@ pub struct Bot {
     pub agent_id: Option<String>,
     #[serde(default)]
     pub system_prompt: Option<String>,
+    #[serde(default)]
+    pub links: DeskLinks,
+}
+
+/// Optional things on the desk that open a page or a file. Empty fields are not clickable.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DeskLinks {
+    pub papers: Option<String>,
+    pub drive: Option<String>,
+    pub mug: Option<String>,
+    pub computer: Option<String>,
 }
 
 impl Bot {
@@ -62,6 +74,7 @@ pub struct BotDto {
     pub model: Option<String>,
     pub agent_id: String,
     pub agent_pinned: bool,
+    pub links: DeskLinks,
 }
 
 pub fn present_bot(bot: &Bot, index: usize, matched: Option<&str>) -> BotDto {
@@ -103,7 +116,23 @@ pub fn present_bot(bot: &Bot, index: usize, matched: Option<&str>) -> BotDto {
         model: bot.model.clone().filter(|m| !m.trim().is_empty()),
         agent_id,
         agent_pinned: pinned.is_some(),
+        links: tidy_links(&bot.links),
     }
+}
+
+fn tidy_links(links: &DeskLinks) -> DeskLinks {
+    DeskLinks {
+        papers: nonempty(links.papers.as_deref()),
+        drive: nonempty(links.drive.as_deref()),
+        mug: nonempty(links.mug.as_deref()),
+        computer: nonempty(links.computer.as_deref()),
+    }
+}
+
+fn nonempty(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
