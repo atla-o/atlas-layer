@@ -62,6 +62,74 @@ export function seatHit(seat: Seat): { x: number; y: number; w: number; h: numbe
   return { x: seat.x - 2, y: seat.y - 22, w: seat.w + 4, h: seat.h + 40 };
 }
 
+export type HotKind = "computer" | "papers" | "drive" | "mug" | "head";
+
+export type Hotspot = {
+  kind: HotKind;
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  href?: string;
+};
+
+function linkOf(bot: Bot, key: keyof NonNullable<Bot["links"]>): string | undefined {
+  const value = bot.links?.[key];
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || undefined;
+}
+
+/** Clickable desk objects. Items with no action are omitted. */
+export function hotspots(bots: Bot[]): Hotspot[] {
+  const seats = layout(bots.length);
+  const spots: Hotspot[] = [];
+  bots.forEach((bot, index) => {
+    const seat = seats[index];
+    if (!seat) return;
+    const computer =
+      linkOf(bot, "computer") ||
+      (bot.connector === "cursor-agents" && bot.agentId
+        ? `https://cursor.com/agents/${bot.agentId}`
+        : undefined);
+    spots.push({
+      kind: "computer",
+      id: bot.id,
+      x: seat.x + 8,
+      y: seat.y + 4,
+      w: 16,
+      h: 16,
+      href: computer,
+    });
+    const papers = linkOf(bot, "papers");
+    if (papers) {
+      spots.push({ kind: "papers", id: bot.id, x: seat.x + 26, y: seat.y + 6, w: 14, h: 10, href: papers });
+    }
+    const drive = linkOf(bot, "drive");
+    if (drive) {
+      spots.push({ kind: "drive", id: bot.id, x: seat.x + 42, y: seat.y + 6, w: 12, h: 10, href: drive });
+    }
+    const mug = linkOf(bot, "mug");
+    if (mug) {
+      spots.push({ kind: "mug", id: bot.id, x: seat.x + seat.w - 20, y: seat.y + 16, w: 10, h: 8, href: mug });
+    }
+    const headX = seat.x + Math.round((seat.w - 18) / 2);
+    spots.push({ kind: "head", id: bot.id, x: headX, y: seat.y - 18, w: 18, h: 22 });
+  });
+  return spots;
+}
+
+export function headPoint(bots: Bot[], id: string): { x: number; y: number } | null {
+  const index = bots.findIndex((bot) => bot.id === id);
+  if (index < 0) return null;
+  const seat = layout(bots.length)[index];
+  if (!seat) return null;
+  return {
+    x: seat.x + Math.round(seat.w / 2),
+    y: seat.y - 18,
+  };
+}
+
 function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.fillStyle = color;
   ctx.fillRect(x | 0, y | 0, w, h);
@@ -82,6 +150,7 @@ export type SceneFrame = {
   updated: string | null;
   focus: string | null;
   selectedId: string | null;
+  hover: Hotspot | null;
   frame: number;
 };
 
@@ -95,7 +164,15 @@ export function paint(ctx: CanvasRenderingContext2D, scene: SceneFrame) {
     const seat = seats[index];
     if (!seat) return;
     paintPerson(ctx, seat, bot, scene.frame);
-    paintDesk(ctx, seat, bot, scene.statuses[bot.id] ?? "idle", scene.frame, scene.selectedId === bot.id);
+    paintDesk(
+      ctx,
+      seat,
+      bot,
+      scene.statuses[bot.id] ?? "idle",
+      scene.frame,
+      scene.selectedId === bot.id,
+      scene.hover?.id === bot.id ? scene.hover : null,
+    );
   });
   paintDecor(ctx);
 }
@@ -281,6 +358,7 @@ function paintDesk(
   status: string,
   frame: number,
   selected: boolean,
+  hover: Hotspot | null,
 ) {
   if (selected) {
     px(ctx, seat.x - 2, seat.y - 22, seat.w + 4, 1, PAPER);
@@ -295,10 +373,33 @@ function paintDesk(
   px(ctx, seat.x, seat.y + seat.h - 3, seat.w, 3, WOOD_DK);
   const mx = seat.x + 8;
   const my = seat.y + 5;
+  if (hover?.kind === "computer") px(ctx, mx - 1, my - 1, 18, 16, PAPER);
   px(ctx, mx, my, 16, 12, INK);
   px(ctx, mx + 1, my + 1, 14, 9, PAPER);
   disc(ctx, mx + 8, my + 5, 2, TERRA);
   px(ctx, mx + 7, my + 12, 3, 2, INK);
+  if (bot.links?.papers) {
+    const px0 = seat.x + 26;
+    const py0 = seat.y + 6;
+    if (hover?.kind === "papers") px(ctx, px0 - 1, py0 - 1, 16, 12, PAPER);
+    px(ctx, px0, py0, 14, 10, CREAM);
+    px(ctx, px0 + 2, py0 + 2, 10, 1, WOOD);
+    px(ctx, px0 + 2, py0 + 5, 8, 1, WOOD);
+  }
+  if (bot.links?.drive) {
+    const dx = seat.x + 42;
+    const dy = seat.y + 6;
+    if (hover?.kind === "drive") px(ctx, dx - 1, dy - 1, 14, 12, PAPER);
+    px(ctx, dx, dy + 2, 12, 8, "#6e8fbe");
+    px(ctx, dx + 1, dy, 6, 3, "#8eadd4");
+  }
+  if (bot.links?.mug) {
+    const ux = seat.x + seat.w - 20;
+    const uy = seat.y + 16;
+    if (hover?.kind === "mug") px(ctx, ux - 1, uy - 1, 12, 10, PAPER);
+    px(ctx, ux, uy + 2, 8, 6, PAPER);
+    px(ctx, ux + 7, uy + 3, 2, 3, WOOD);
+  }
   px(ctx, seat.x + 28, seat.y + 16, 18, 5, "#4a3b32");
   px(ctx, seat.x + 30, seat.y + 18, 14, 1, "#6b5344");
   const lx = seat.x + seat.w - 12;
