@@ -165,6 +165,8 @@ Click a desk. Messages are appended to `history/<id>.jsonl` as one JSON object p
 
 `role` is `user`, `assistant`, or `system`. Reopening a desk shows that history. A lamp turns cream when an assistant line is still unread.
 
+What you send and what the bot sends back are the same text in both places: the desk log, and the relay, Cursor transcript, or local model context. Both sides are written to that desk's history. A line that arrives twice is kept once.
+
 ## Connectors
 
 Each connector is a Rust `BotConnector` with an adapter behind it (`OllamaConnector`, `RelayConnector`, `CursorConnector`, `EchoConnector`). The desk's `connector` field picks the adapter.
@@ -191,7 +193,7 @@ The URL is `relay.url`, unless `relay.urlEnv` (default `ATLAS_LAYER_WEBHOOK_URL`
 
 There is no field in the config for the token itself.
 
-Replies are not read from the HTTP response. Drop them in the inbox.
+The desk stores your message before the POST, so the history and the relay carry the same text. If the response body is the reply (`text`, `reply`, `content`, `message`, or plain text that is not just `ok`), that reply is shown on the desk and appended to history. An empty body or a bare acknowledgement stays open for the inbox, which is how a reply that arrives later still lands in the same history. A reply that shows up in both the response and the inbox is stored once.
 
 Directory (`paths.inboxDir`), one JSON file per reply. The app moves a handled file to `processed/` and a file it cannot parse, or whose `bot` matches no desk, to `unmatched/`:
 
@@ -230,7 +232,7 @@ Calls:
 - `GET /v1/agents` — list, status, and name matching
 - `POST /v1/agents/{id}/runs` with `{ "prompt": { "text": "…" } }` — follow-up
 - `GET /v1/agents/{id}/runs/{runId}/stream` — assistant text as it arrives
-- `GET /v0/agents/{id}/conversation` — history when you open the desk
+- `GET /v0/agents/{id}/conversation` — the remote transcript. Opening the desk, finishing a follow-up, and the agent poll each copy any line the desk does not already have into `history/<id>.jsonl` and show it. A line you already sent or received is linked, not duplicated.
 - `GET /v1/agents/{id}` and `GET /v1/agents/{id}/runs/{latestRunId}` — fallback when v0 has no transcript
 
 Status `ACTIVE` lights the lamp amber, unless a reply is already unread. The list is refreshed about once a minute (`cursor.pollSeconds`, minimum 15; `0` turns it off) and only if a key is present.
