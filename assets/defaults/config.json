@@ -26,6 +26,10 @@
     "authEnv": "ATLAS_LAYER_WEBHOOK_AUTH",
     "authKeyringAccount": "webhook-auth"
   },
+  "localWindow": {
+    "inboxDir": "~/Atla/AI/inbox",
+    "launchCommand": ""
+  },
   "cursor": {
     "baseUrl": "https://api.cursor.com",
     "apiKeyEnv": "CURSOR_API_KEY",
