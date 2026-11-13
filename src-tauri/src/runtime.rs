@@ -9,12 +9,15 @@ use tokio::sync::Mutex;
 use crate::config::{self, effective_agent, load_office, ollama_base, relay_url, OfficeData};
 use crate::connectors::cursor::{self, CursorConnector, RemoteAgent};
 use crate::connectors::echo::EchoConnector;
+use crate::connectors::local_window::LocalWindowConnector;
 use crate::connectors::ollama::OllamaConnector;
 use crate::connectors::relay::RelayConnector;
 use crate::connectors::{self, Connector, DispatchOutcome, Outbound, TokenTx};
 use crate::history;
 use crate::inbox::{self, InboxReply};
-use crate::model::{self, present_bot, safe_bot_id, Bot, BotDto, StoredMessage, TodoDto};
+use crate::model::{
+    self, present_bot, safe_bot_id, Bot, BotDto, MetricDto, StoredMessage, TodoDto,
+};
 use crate::secrets::{self, echo_forced};
 use crate::services::{BackgroundService, MockService, ServiceReport, ServiceRequest};
 use crate::todos;
@@ -58,6 +61,8 @@ pub enum UiEvent {
     Todos {
         todos: Vec<TodoDto>,
         today_focus: Option<String>,
+        metrics: Vec<MetricDto>,
+        updated: Option<String>,
     },
     Message {
         bot_id: String,
@@ -86,6 +91,8 @@ struct OfficeSnapshot {
     bots: Vec<BotDto>,
     todos: Vec<TodoDto>,
     today_focus: Option<String>,
+    metrics: Vec<MetricDto>,
+    updated: Option<String>,
     statuses: std::collections::HashMap<String, String>,
     paths: PathDto,
     warnings: Vec<String>,
@@ -141,19 +148,20 @@ async fn get_office_state(state: State<'_, AppState>) -> Result<OfficeSnapshot, 
 
 fn snapshot(data: &mut OfficeData) -> Result<OfficeSnapshot, String> {
     let mut warnings = data.warnings.clone();
-    let (todos, today_focus) = match todos::view(&data.paths.todo, &data.paths.today) {
-        Ok(view) => {
-            data.last_todo_sig = view.signature();
-            if let Some(note) = view.warning.clone() {
-                warnings.push(note);
+    let (todos, today_focus, metrics, updated) =
+        match todos::view(&data.paths.todo, &data.paths.today) {
+            Ok(view) => {
+                data.last_todo_sig = view.signature();
+                if let Some(note) = view.warning.clone() {
+                    warnings.push(note);
+                }
+                (view.todos, view.focus, view.metrics, view.updated)
             }
-            (view.todos, view.focus)
-        }
-        Err(err) => {
-            warnings.push(err);
-            (Vec::new(), None)
-        }
-    };
+            Err(err) => {
+                warnings.push(err);
+                (Vec::new(), None, Vec::new(), None)
+            }
+        };
     let bots = data
         .bots
         .iter()
@@ -173,6 +181,8 @@ fn snapshot(data: &mut OfficeData) -> Result<OfficeSnapshot, String> {
         bots,
         todos,
         today_focus,
+        metrics,
+        updated,
         statuses: data.statuses.clone(),
         paths: PathDto {
             todo: data.paths.todo.display().to_string(),
@@ -519,6 +529,8 @@ async fn publish_board(app: &AppHandle, state: &AppState, view: &todos::TodoView
         &UiEvent::Todos {
             todos: view.todos.clone(),
             today_focus: view.focus.clone(),
+            metrics: view.metrics.clone(),
+            updated: view.updated.clone(),
         },
     );
 }
@@ -585,6 +597,22 @@ async fn build_outbound(
 
 async fn build_connector(state: &AppState, bot: &Bot) -> Result<Connector, String> {
     match bot.connector.as_str() {
+        "local-window" => {
+            let (inbox_dir, launch_command) = {
+                let data = state.data.lock().await;
+                let inbox_dir = if data.config.local_window.inbox_dir.trim().is_empty() {
+                    config::expand_tilde("~/Atla/AI/inbox")
+                } else {
+                    config::resolve_against(&data.config_dir, &data.config.local_window.inbox_dir)
+                };
+                (inbox_dir, data.config.local_window.launch_command.clone())
+            };
+            Ok(Connector::LocalWindow(LocalWindowConnector {
+                inbox_dir,
+                launch_command,
+                home: dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")),
+            }))
+        }
         "local-ollama" => {
             let (base_url, model, echo) = {
                 let data = state.data.lock().await;
@@ -1036,6 +1064,8 @@ fn reload_board(app: &AppHandle, state: &AppState) {
                 &UiEvent::Todos {
                     todos: view.todos,
                     today_focus: view.focus,
+                    metrics: view.metrics,
+                    updated: view.updated,
                 },
             );
             if let Some(message) = view.warning {
