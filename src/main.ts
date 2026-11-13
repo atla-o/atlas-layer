@@ -40,8 +40,8 @@ function applySnapshot(next: OfficeSnapshot) {
   document.querySelector("#title")!.textContent = "Atlas Layer";
   document.title = "Atlas Layer";
   scene.setBots(next.bots, next.statuses);
-  scene.setTodos(next.todos);
-  board.set(next.todos, next.todayFocus, next.paths.todo);
+  scene.setBoard(next.todos, next.metrics, next.updated, next.todayFocus);
+  board.set(next);
   settings.render(next);
   note.hidden = true;
   if (!officeOn) {
@@ -76,8 +76,10 @@ function onEvent(event: OfficeEvent) {
   } else if (event.type === "todos") {
     snapshot.todos = event.todos;
     snapshot.todayFocus = event.todayFocus;
-    scene.setTodos(event.todos);
-    board.set(event.todos, event.todayFocus, snapshot.paths.todo);
+    snapshot.metrics = event.metrics;
+    snapshot.updated = event.updated;
+    scene.setBoard(event.todos, event.metrics, event.updated, event.todayFocus);
+    board.set(snapshot);
   } else if (event.type === "warning") {
     showBanner(event.message, "error");
   } else {
