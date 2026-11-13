@@ -187,7 +187,7 @@ Used for Atlas and every other cloud desk. One URL, one auth header. The desk id
 
 `reply_to_id` is the id of the user message just stored in history. Send it back as `in_reply_to`.
 
-The URL is `relay.url`, unless `relay.urlEnv` (default `ATLAS_LAYER_WEBHOOK_URL`) is set. The Authorization value is `relay.authEnv` (default `ATLAS_LAYER_WEBHOOK_AUTH`) or, if that is empty, the keyring account `relay.authKeyringAccount` (default `webhook-auth`). A value with no space is sent as `Bearer <value>`. `Bearer …` and `Basic …` are sent as written. The header is omitted when no secret is set. A config carried over from Atla Office keeps the env var names it already had.
+The URL is `relay.url`, unless `relay.urlEnv` (default `ATLAS_LAYER_WEBHOOK_URL`) is set. The Authorization value is `relay.authEnv` (default `ATLAS_LAYER_WEBHOOK_AUTH`) or, if that is empty, the keyring account `relay.authKeyringAccount` (default `webhook-auth`). A value with no space is sent as `Bearer <value>`. `Bearer …` and `Basic …` are sent as written. The header is omitted when no secret is set. A config carried over from `~/.config/atla-office` keeps the env var names it already had.
 
 There is no field in the config for the token itself.
 
