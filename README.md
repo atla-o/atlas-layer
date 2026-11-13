@@ -160,6 +160,8 @@ An item is an object with a text field (`text`, `title`, `content`, `task`, `nam
 
 ## Chat
 
+Click a character and the chat opens as a speech bubble at that head, with a tail pointing at them. The bubble stays on the head if the room is resized. The desk computer opens the same chat, or the Cursor agent page when that desk has an agent id or a `links.computer` URL. Papers, a Drive folder, and a mug are drawn only when `links.papers`, `links.drive`, or `links.mug` is set, and each one opens that page or file with `xdg-open` (Firefox, if that is the default browser). The lamp and the name plate are not clickable. The whiteboard still opens the to-do list.
+
 Click a desk. Messages are appended to `history/<id>.jsonl` as one JSON object per line:
 
 ```json
