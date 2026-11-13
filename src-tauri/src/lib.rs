@@ -7,6 +7,7 @@ pub mod connectors;
 pub mod history;
 pub mod inbox;
 pub mod model;
+pub mod open;
 pub mod secrets;
 pub mod services;
 pub mod todos;
