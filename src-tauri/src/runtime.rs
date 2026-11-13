@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,6 +19,7 @@ use crate::inbox::{self, InboxReply};
 use crate::model::{
     self, present_bot, safe_bot_id, Bot, BotDto, MetricDto, StoredMessage, TodoDto,
 };
+use crate::open::external_target;
 use crate::secrets::{self, echo_forced};
 use crate::services::{BackgroundService, MockService, ServiceReport, ServiceRequest};
 use crate::todos;
@@ -411,6 +413,23 @@ async fn toggle_todo(
     publish_board(&app, &state, &view).await;
     let mut data = state.data.lock().await;
     snapshot(&mut data)
+}
+
+#[tauri::command]
+fn open_link(url: String) -> Result<(), String> {
+    let target = external_target(&url)?;
+    let status = Command::new("xdg-open")
+        .arg(&target)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|err| format!("Could not open that link ({err})."))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("xdg-open exited {status}."))
+    }
 }
 
 #[tauri::command]
@@ -1265,6 +1284,7 @@ pub fn run() {
             toggle_todo,
             refresh_cursor_agents,
             bind_cursor_agent,
+            open_link,
             set_feature,
         ])
         .run(tauri::generate_context!())
