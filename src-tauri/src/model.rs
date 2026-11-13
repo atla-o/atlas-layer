@@ -33,6 +33,7 @@ impl Bot {
     pub fn kind(&self) -> Option<&'static str> {
         match self.connector.as_str() {
             "local-ollama" => Some("local-ollama"),
+            "local-window" => Some("local-window"),
             "relay-webhook" => Some("relay-webhook"),
             "cursor-agents" => Some("cursor-agents"),
             "echo" => Some("echo"),
@@ -127,6 +128,15 @@ pub struct TodoDto {
     pub text: String,
     pub done: bool,
     pub source: String,
+    pub today: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricDto {
+    pub label: String,
+    pub value: String,
+    pub bad: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -229,6 +239,7 @@ pub fn parse_bots(root: &Value) -> (Vec<Bot>, Vec<String>) {
 pub fn connector_label(kind: &str) -> &'static str {
     match kind {
         "local-ollama" => "Local model",
+        "local-window" => "Local window",
         "relay-webhook" => "Cloud relay",
         "cursor-agents" => "Cursor agent",
         "echo" => "Echo",
