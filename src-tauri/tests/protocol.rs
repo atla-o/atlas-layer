@@ -5,10 +5,12 @@ use atla_office::connectors::cursor::{
 };
 use atla_office::connectors::echo::EchoConnector;
 use atla_office::connectors::ollama::{consume_ollama_buffer, OllamaAccum, OllamaConnector};
-use atla_office::connectors::relay::{normalize_auth_header, relay_body, RelayConnector};
+use atla_office::connectors::relay::{
+    normalize_auth_header, relay_body, reply_text, RelayConnector,
+};
 use atla_office::connectors::{BotConnector, DispatchOutcome, Outbound, TokenTx};
 use atla_office::inbox::{self, InboxReply};
-use atla_office::model::{parse_bots, StoredMessage};
+use atla_office::model::{parse_bots, StoredMessage, TranscriptLine};
 use atla_office::secrets::{self, scrub};
 use atla_office::todos;
 use serde_json::{json, Value};
@@ -287,6 +289,109 @@ async fn relay_posts_the_protocol_body() {
         .to_str()
         .unwrap();
     assert_eq!(header, "Bearer desk-token");
+}
+
+#[tokio::test]
+async fn relay_mirrors_a_reply_in_the_response_body() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/hook"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "text": "The shelf sketch is up."
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let connector = RelayConnector {
+        url: format!("{}/hook", server.uri()),
+        auth: None,
+        client: client(),
+    };
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let outcome = connector
+        .dispatch(outbound("products", "Sketch the shelf"), &TokenTx::new(tx))
+        .await
+        .unwrap();
+    assert!(matches!(outcome, DispatchOutcome::Reply(text) if text == "The shelf sketch is up."));
+    assert_eq!(reply_text(""), None);
+    assert_eq!(reply_text("ok"), None);
+    assert_eq!(reply_text("{\"ok\":true}"), None);
+}
+
+#[test]
+fn history_links_a_remote_transcript_without_duplicating() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = atla_office::history::path_for(dir.path(), "atlas").unwrap();
+    atla_office::history::append(
+        &path,
+        &StoredMessage {
+            id: "m-user".into(),
+            role: "user".into(),
+            text: "Sketch the shelf".into(),
+            ts: "2026-11-12T08:00:00Z".into(),
+            read: true,
+            in_reply_to: None,
+            remote_id: None,
+        },
+    )
+    .unwrap();
+    atla_office::history::append(
+        &path,
+        &StoredMessage {
+            id: "m-user:reply".into(),
+            role: "assistant".into(),
+            text: "The shelf sketch is up.".into(),
+            ts: "2026-11-12T08:00:01Z".into(),
+            read: false,
+            in_reply_to: Some("m-user".into()),
+            remote_id: None,
+        },
+    )
+    .unwrap();
+    let added = atla_office::history::mirror_lines(
+        &path,
+        &[
+            TranscriptLine {
+                remote_id: "remote-user".into(),
+                role: "user".into(),
+                text: "Sketch the shelf".into(),
+                ts: None,
+            },
+            TranscriptLine {
+                remote_id: "remote-assistant".into(),
+                role: "assistant".into(),
+                text: "The shelf sketch is up.".into(),
+                ts: None,
+            },
+            TranscriptLine {
+                remote_id: "remote-extra".into(),
+                role: "assistant".into(),
+                text: "I also moved the lamp.".into(),
+                ts: None,
+            },
+        ],
+        false,
+    )
+    .unwrap();
+    assert_eq!(added.len(), 1);
+    assert_eq!(added[0].text, "I also moved the lamp.");
+    assert!(!added[0].read);
+    let stored = atla_office::history::read_all(&path);
+    assert_eq!(stored.len(), 3);
+    assert_eq!(stored[0].remote_id.as_deref(), Some("remote-user"));
+    assert_eq!(stored[1].remote_id.as_deref(), Some("remote-assistant"));
+    assert!(atla_office::history::already_mirrored(
+        &path,
+        "assistant",
+        "The shelf sketch is up.",
+        None,
+    ));
+    assert!(!atla_office::history::already_mirrored(
+        &path,
+        "assistant",
+        "A different reply.",
+        Some("m-user"),
+    ));
 }
 
 #[tokio::test]
