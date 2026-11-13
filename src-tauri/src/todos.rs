@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::model::{new_id, now_iso, TodoDto};
+use crate::model::{new_id, now_iso, MetricDto, TodoDto};
 
 #[derive(Debug)]
 struct ListedFile {
@@ -16,6 +16,8 @@ struct ListedFile {
 pub struct TodoView {
     pub todos: Vec<TodoDto>,
     pub focus: Option<String>,
+    pub metrics: Vec<MetricDto>,
+    pub updated: Option<String>,
     pub warning: Option<String>,
 }
 
@@ -30,7 +32,21 @@ impl TodoView {
             sig.push('\t');
             sig.push_str(&item.source);
             sig.push('\t');
+            sig.push(if item.today { 'T' } else { 't' });
+            sig.push('\t');
             sig.push_str(&item.text);
+        }
+        for metric in &self.metrics {
+            sig.push('\n');
+            sig.push(if metric.bad { '!' } else { '.' });
+            sig.push('\t');
+            sig.push_str(&metric.label);
+            sig.push('\t');
+            sig.push_str(&metric.value);
+        }
+        if let Some(updated) = &self.updated {
+            sig.push('\n');
+            sig.push_str(updated);
         }
         sig
     }
@@ -51,13 +67,21 @@ pub fn view(todo_path: &Path, today_path: &Path) -> Result<TodoView, String> {
         }
     }
     let mut focus = None;
+    let mut metrics = Vec::new();
+    let mut updated = None;
     let mut warning = None;
     if today_path.exists() {
         match fs::read_to_string(today_path) {
             Ok(text) if text.trim().is_empty() => {}
             Ok(text) => match serde_json::from_str::<Value>(&text) {
                 Ok(root) => {
-                    focus = focus_of(&root);
+                    metrics = metrics_of(&root);
+                    updated = updated_of(&root);
+                    focus = if metrics.is_empty() {
+                        focus_of(&root)
+                    } else {
+                        None
+                    };
                     let mut extra = Vec::new();
                     collect_tasks(&root, &mut extra, 0);
                     for (index, raw) in extra.iter().enumerate() {
@@ -81,9 +105,12 @@ pub fn view(todo_path: &Path, today_path: &Path) -> Result<TodoView, String> {
             }
         }
     }
+    todos.sort_by(|left, right| right.today.cmp(&left.today));
     Ok(TodoView {
         todos,
         focus,
+        metrics,
+        updated,
         warning,
     })
 }
@@ -254,6 +281,7 @@ fn project(raw: &Value, index: usize, source: &str) -> Option<TodoDto> {
                 id: format!("{source}-{index}"),
                 text: text.to_string(),
                 done: false,
+                today: false,
                 source: source.to_string(),
             })
         }
@@ -264,6 +292,7 @@ fn project(raw: &Value, index: usize, source: &str) -> Option<TodoDto> {
                 id: id_of(map, index, source),
                 text,
                 done,
+                today: flag_of(map, "today"),
                 source: source.to_string(),
             })
         }
@@ -327,6 +356,54 @@ fn flip(raw: &mut Value) {
     }
 }
 
+fn flag_of(map: &Map<String, Value>, key: &str) -> bool {
+    match map.get(key) {
+        Some(Value::Bool(flag)) => *flag,
+        Some(Value::String(text)) => matches!(text.as_str(), "true" | "yes"),
+        _ => false,
+    }
+}
+
+fn metrics_of(root: &Value) -> Vec<MetricDto> {
+    let Some(items) = root.get("metrics").and_then(|value| value.as_array()) else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .filter_map(|item| {
+            let map = item.as_object()?;
+            let label = map
+                .get("label")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim();
+            let value = map
+                .get("value")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim();
+            if label.is_empty() || value.is_empty() {
+                return None;
+            }
+            Some(MetricDto {
+                label: label.to_string(),
+                value: value.to_string(),
+                bad: flag_of(map, "bad"),
+            })
+        })
+        .collect()
+}
+
+fn updated_of(root: &Value) -> Option<String> {
+    let text = root.get("updated").and_then(|value| value.as_str())?;
+    let text = text.trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_string())
+    }
+}
+
 fn focus_of(root: &Value) -> Option<String> {
     let obj = root.as_object()?;
     for key in ["focus", "headline", "intention"] {
@@ -369,8 +446,13 @@ fn collect_tasks(value: &Value, out: &mut Vec<Value>, depth: usize) {
         }
         Value::Object(map) => {
             for (key, child) in map {
-                if matches!(key.as_str(), "focus" | "headline" | "intention" | "date")
-                    && !child.is_array()
+                if key == "metrics" {
+                    continue;
+                }
+                if matches!(
+                    key.as_str(),
+                    "focus" | "headline" | "intention" | "date" | "updated"
+                ) && !child.is_array()
                     && !child.is_object()
                 {
                     continue;
