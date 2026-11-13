@@ -86,7 +86,6 @@ fn spawn_detached(argv: &[String]) -> Result<(), String> {
     }
 }
 
-
 pub fn wake_with(
     commands: &[Vec<String>],
     running: bool,
