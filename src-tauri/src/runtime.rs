@@ -9,12 +9,15 @@ use tokio::sync::Mutex;
 use crate::config::{self, effective_agent, load_office, ollama_base, relay_url, OfficeData};
 use crate::connectors::cursor::{self, CursorConnector, RemoteAgent};
 use crate::connectors::echo::EchoConnector;
+use crate::connectors::local_window::LocalWindowConnector;
 use crate::connectors::ollama::OllamaConnector;
 use crate::connectors::relay::RelayConnector;
 use crate::connectors::{self, Connector, DispatchOutcome, Outbound, TokenTx};
 use crate::history;
 use crate::inbox::{self, InboxReply};
-use crate::model::{self, present_bot, safe_bot_id, Bot, BotDto, StoredMessage, TodoDto};
+use crate::model::{
+    self, present_bot, safe_bot_id, Bot, BotDto, MetricDto, StoredMessage, TodoDto,
+};
 use crate::secrets::{self, echo_forced};
 use crate::services::{BackgroundService, MockService, ServiceReport, ServiceRequest};
 use crate::todos;
@@ -58,6 +61,8 @@ pub enum UiEvent {
     Todos {
         todos: Vec<TodoDto>,
         today_focus: Option<String>,
+        metrics: Vec<MetricDto>,
+        updated: Option<String>,
     },
     Message {
         bot_id: String,
@@ -86,6 +91,8 @@ struct OfficeSnapshot {
     bots: Vec<BotDto>,
     todos: Vec<TodoDto>,
     today_focus: Option<String>,
+    metrics: Vec<MetricDto>,
+    updated: Option<String>,
     statuses: std::collections::HashMap<String, String>,
     paths: PathDto,
     warnings: Vec<String>,
@@ -141,19 +148,20 @@ async fn get_office_state(state: State<'_, AppState>) -> Result<OfficeSnapshot, 
 
 fn snapshot(data: &mut OfficeData) -> Result<OfficeSnapshot, String> {
     let mut warnings = data.warnings.clone();
-    let (todos, today_focus) = match todos::view(&data.paths.todo, &data.paths.today) {
-        Ok(view) => {
-            data.last_todo_sig = view.signature();
-            if let Some(note) = view.warning.clone() {
-                warnings.push(note);
+    let (todos, today_focus, metrics, updated) =
+        match todos::view(&data.paths.todo, &data.paths.today) {
+            Ok(view) => {
+                data.last_todo_sig = view.signature();
+                if let Some(note) = view.warning.clone() {
+                    warnings.push(note);
+                }
+                (view.todos, view.focus, view.metrics, view.updated)
             }
-            (view.todos, view.focus)
-        }
-        Err(err) => {
-            warnings.push(err);
-            (Vec::new(), None)
-        }
-    };
+            Err(err) => {
+                warnings.push(err);
+                (Vec::new(), None, Vec::new(), None)
+            }
+        };
     let bots = data
         .bots
         .iter()
@@ -173,6 +181,8 @@ fn snapshot(data: &mut OfficeData) -> Result<OfficeSnapshot, String> {
         bots,
         todos,
         today_focus,
+        metrics,
+        updated,
         statuses: data.statuses.clone(),
         paths: PathDto {
             todo: data.paths.todo.display().to_string(),
@@ -364,6 +374,9 @@ async fn send_message(
     tauri::async_runtime::spawn(async move {
         let result = run_dispatch(&app_task, &state_task, &bot_task, &user_task).await;
         settle(&app_task, &state_task, &bot_task.id, &user_task.id, result).await;
+        if bot_task.connector == "cursor-agents" {
+            mirror_cursor_desks(&app_task, &state_task, Some(&bot_task.id)).await;
+        }
     });
     Ok(user)
 }
@@ -516,6 +529,8 @@ async fn publish_board(app: &AppHandle, state: &AppState, view: &todos::TodoView
         &UiEvent::Todos {
             todos: view.todos.clone(),
             today_focus: view.focus.clone(),
+            metrics: view.metrics.clone(),
+            updated: view.updated.clone(),
         },
     );
 }
@@ -582,6 +597,22 @@ async fn build_outbound(
 
 async fn build_connector(state: &AppState, bot: &Bot) -> Result<Connector, String> {
     match bot.connector.as_str() {
+        "local-window" => {
+            let (inbox_dir, launch_command) = {
+                let data = state.data.lock().await;
+                let inbox_dir = if data.config.local_window.inbox_dir.trim().is_empty() {
+                    config::expand_tilde("~/Atla/AI/inbox")
+                } else {
+                    config::resolve_against(&data.config_dir, &data.config.local_window.inbox_dir)
+                };
+                (inbox_dir, data.config.local_window.launch_command.clone())
+            };
+            Ok(Connector::LocalWindow(LocalWindowConnector {
+                inbox_dir,
+                launch_command,
+                home: dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")),
+            }))
+        }
         "local-ollama" => {
             let (base_url, model, echo) = {
                 let data = state.data.lock().await;
@@ -838,6 +869,81 @@ async fn apply_agent_list(app: &AppHandle, state: &AppState, agents: &[RemoteAge
     }
 }
 
+/// Pulls each Cursor agent's transcript into that desk's history and shows
+/// any line the desk has not already stored. Skips a desk that is mid-send
+/// so the reply just streamed is not written twice.
+async fn mirror_cursor_desks(app: &AppHandle, state: &AppState, only_bot: Option<&str>) {
+    let desks: Vec<(String, String, std::path::PathBuf, bool)> = {
+        let data = state.data.lock().await;
+        if !data.config.features.office {
+            return;
+        }
+        let mut desks = Vec::new();
+        for bot in &data.bots {
+            if bot.connector != "cursor-agents" {
+                continue;
+            }
+            if only_bot.is_some_and(|id| id != bot.id) {
+                continue;
+            }
+            if only_bot.is_none() && data.inflight.contains(&bot.id) {
+                continue;
+            }
+            let Some(agent_id) = effective_agent(&data, bot) else {
+                continue;
+            };
+            let Ok(history_path) = history::path_for(&data.paths.history, &bot.id) else {
+                continue;
+            };
+            desks.push((
+                bot.id.clone(),
+                agent_id,
+                history_path,
+                data.focus.as_deref() == Some(bot.id.as_str()),
+            ));
+        }
+        desks
+    };
+    for (bot_id, agent_id, history_path, focused) in desks {
+        let Ok(connector) = cursor_from_state(state, &agent_id).await else {
+            continue;
+        };
+        let Ok(lines) = connector.transcript().await else {
+            continue;
+        };
+        let Ok(added) = history::mirror_lines(&history_path, &lines, focused) else {
+            continue;
+        };
+        let mut unseen = false;
+        for message in added {
+            if message.role == "assistant" && !message.read {
+                unseen = true;
+            }
+            emit(
+                app,
+                &UiEvent::Message {
+                    bot_id: bot_id.clone(),
+                    message,
+                },
+            );
+        }
+        if unseen {
+            let mut data = state.data.lock().await;
+            if !data.inflight.contains(&bot_id) && data.focus.as_deref() != Some(bot_id.as_str()) {
+                data.statuses.insert(bot_id.clone(), "message".into());
+                drop(data);
+                emit(
+                    app,
+                    &UiEvent::Status {
+                        bot_id,
+                        status: "message".into(),
+                    },
+                );
+            }
+        }
+    }
+}
+
 fn start_poll(app: AppHandle, state: AppState) {
     tauri::async_runtime::spawn(async move {
         let seconds = {
@@ -869,6 +975,7 @@ fn start_poll(app: AppHandle, state: AppState) {
                     apply_agent_list(&app, &state, &agents).await;
                 }
             }
+            mirror_cursor_desks(&app, &state, None).await;
         }
     });
 }
@@ -957,6 +1064,8 @@ fn reload_board(app: &AppHandle, state: &AppState) {
                 &UiEvent::Todos {
                     todos: view.todos,
                     today_focus: view.focus,
+                    metrics: view.metrics,
+                    updated: view.updated,
                 },
             );
             if let Some(message) = view.warning {
@@ -1067,6 +1176,14 @@ fn deliver(app: &AppHandle, state: &AppState, reply: &InboxReply, source: &str) 
         let focused = data.focus.as_deref() == Some(bot_id.as_str());
         (bot_id, history_path, focused)
     };
+    if history::already_mirrored(
+        &history_path,
+        "assistant",
+        &reply.text,
+        reply.in_reply_to.as_deref(),
+    ) {
+        return;
+    }
     let message = StoredMessage {
         id: inbox::content_id(source, reply),
         role: "assistant".into(),

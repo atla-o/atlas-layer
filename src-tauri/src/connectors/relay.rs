@@ -10,11 +10,13 @@ pub struct RelayConnector {
     pub client: reqwest::Client,
 }
 
-pub fn relay_body(bot: &str, text: &str, reply_to_id: &str) -> Value {
+pub fn relay_body(bot: &str, text: &str, message_id: &str) -> Value {
     serde_json::json!({
         "bot": bot,
+        "desk": bot,
+        "id": message_id,
         "text": text,
-        "reply_to_id": reply_to_id,
+        "reply_to_id": message_id,
     })
 }
 
@@ -48,13 +50,81 @@ impl BotConnector for RelayConnector {
             .send()
             .await
             .map_err(|_| format!("The relay at {} did not answer.", host_only(&self.url)))?;
-        if !response.status().is_success() {
-            let status = response.status();
-            let detail = response.text().await.unwrap_or_default();
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        if !status.is_success() {
             let snippet: String = detail.chars().take(160).collect();
             let message = scrub(&header, &format!("The relay returned {status}. {snippet}"));
             return Err(scrub(&raw_secret, &message));
         }
-        Ok(DispatchOutcome::Accepted)
+        match reply_text(&detail) {
+            Some(text) => {
+                let text = scrub(&raw_secret, &scrub(&header, &text));
+                if text.trim().is_empty() {
+                    Ok(DispatchOutcome::Accepted)
+                } else {
+                    Ok(DispatchOutcome::Reply(text))
+                }
+            }
+            None => Ok(DispatchOutcome::Accepted),
+        }
     }
+}
+
+/// Text the relay sent back in the HTTP body. Empty bodies and bare
+/// acknowledgements stay `Accepted` so the inbox can still deliver the reply.
+pub fn reply_text(body: &str) -> Option<String> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        return json_reply(&value);
+    }
+    if is_ack(trimmed) {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn json_reply(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        let text = text.trim();
+        if text.is_empty() || is_ack(text) {
+            return None;
+        }
+        return Some(text.to_string());
+    }
+    for key in ["text", "reply", "content"] {
+        if let Some(text) = value.get(key).and_then(|item| item.as_str()) {
+            let text = text.trim();
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+    if let Some(text) = value.get("message").and_then(|item| item.as_str()) {
+        let text = text.trim();
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
+    }
+    if let Some(text) = value
+        .pointer("/message/content")
+        .and_then(|item| item.as_str())
+    {
+        let text = text.trim();
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
+    }
+    None
+}
+
+fn is_ack(text: &str) -> bool {
+    matches!(
+        text.trim().to_ascii_lowercase().as_str(),
+        "ok" | "accepted" | "success" | "queued" | "true"
+    )
 }

@@ -13,7 +13,9 @@ fi
 node scripts/gen-icon.mjs
 npm install
 npm run build
-cargo build --release --manifest-path src-tauri/Cargo.toml
+# custom-protocol embeds the built page. Without it the binary loads devUrl
+# (http://127.0.0.1:47331) and the installed app shows connection refused.
+cargo build --release --manifest-path src-tauri/Cargo.toml --features custom-protocol
 
 bindir="${HOME}/.local/bin"
 appdir="${HOME}/.local/share/applications"
@@ -22,9 +24,13 @@ cfg="${XDG_CONFIG_HOME:-$HOME/.config}/atlas-layer"
 legacy="${XDG_CONFIG_HOME:-$HOME/.config}/atla-office"
 mkdir -p "$bindir" "$appdir" "$icondir/128x128/apps" "$icondir/48x48/apps" "$cfg"
 
-install -m 755 src-tauri/target/release/atlas-layer "$bindir/atlas-layer"
-install -m 644 packaging/icon-128.png "$icondir/128x128/apps/atlas-layer.png"
-install -m 644 packaging/icon-48.png "$icondir/48x48/apps/atlas-layer.png"
+# `install` is a shell function on some machines and would swallow -m.
+cp src-tauri/target/release/atlas-layer "$bindir/atlas-layer"
+chmod 755 "$bindir/atlas-layer"
+cp packaging/icon-128.png "$icondir/128x128/apps/atlas-layer.png"
+chmod 644 "$icondir/128x128/apps/atlas-layer.png"
+cp packaging/icon-48.png "$icondir/48x48/apps/atlas-layer.png"
+chmod 644 "$icondir/48x48/apps/atlas-layer.png"
 
 sed \
   -e "s|@BIN@|$bindir/atlas-layer|" \

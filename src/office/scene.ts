@@ -1,4 +1,4 @@
-import type { Bot, Todo } from "../types";
+import type { BoardMetric, Bot, Todo } from "../types";
 import { BOARD, layout, paint, seatHit, WORLD_H, WORLD_W, type SceneFrame } from "./draw";
 
 export class OfficeScene {
@@ -10,6 +10,9 @@ export class OfficeScene {
   private bots: Bot[] = [];
   private statuses: Record<string, string> = {};
   private todos: Todo[] = [];
+  private metrics: BoardMetric[] = [];
+  private updated: string | null = null;
+  private focus: string | null = null;
   private selectedId: string | null = null;
   private reduceMotion: boolean;
 
@@ -42,8 +45,11 @@ export class OfficeScene {
     this.draw();
   }
 
-  setTodos(todos: Todo[]) {
+  setBoard(todos: Todo[], metrics: BoardMetric[], updated: string | null, focus: string | null) {
     this.todos = todos;
+    this.metrics = metrics;
+    this.updated = updated;
+    this.focus = focus;
     this.draw();
   }
 
@@ -67,6 +73,9 @@ export class OfficeScene {
       bots: this.bots,
       statuses: this.statuses,
       todos: this.todos,
+      metrics: this.metrics,
+      updated: this.updated,
+      focus: this.focus,
       selectedId: this.selectedId,
       frame: this.frame,
     };

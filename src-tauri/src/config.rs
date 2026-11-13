@@ -23,6 +23,7 @@ pub struct AppConfig {
     pub ollama: OllamaCfg,
     pub relay: RelayCfg,
     pub cursor: CursorCfg,
+    pub local_window: LocalWindowCfg,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -77,6 +78,13 @@ pub struct CursorCfg {
     pub poll_seconds: u64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LocalWindowCfg {
+    pub inbox_dir: String,
+    pub launch_command: String,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -86,6 +94,7 @@ impl Default for AppConfig {
             ollama: OllamaCfg::default(),
             relay: RelayCfg::default(),
             cursor: CursorCfg::default(),
+            local_window: LocalWindowCfg::default(),
         }
     }
 }
@@ -138,6 +147,15 @@ impl Default for RelayCfg {
             url_env: "ATLAS_LAYER_WEBHOOK_URL".into(),
             auth_env: "ATLAS_LAYER_WEBHOOK_AUTH".into(),
             auth_keyring_account: "webhook-auth".into(),
+        }
+    }
+}
+
+impl Default for LocalWindowCfg {
+    fn default() -> Self {
+        Self {
+            inbox_dir: "~/Atla/AI/inbox".into(),
+            launch_command: String::new(),
         }
     }
 }

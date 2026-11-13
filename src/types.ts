@@ -1,4 +1,4 @@
-export type ConnectorKind = "local-ollama" | "relay-webhook" | "cursor-agents" | "echo";
+export type ConnectorKind = "local-ollama" | "local-window" | "relay-webhook" | "cursor-agents" | "echo";
 
 export type Bot = {
   id: string;
@@ -17,7 +17,14 @@ export type Todo = {
   id: string;
   text: string;
   done: boolean;
+  today: boolean;
   source: "todo" | "today" | string;
+};
+
+export type BoardMetric = {
+  label: string;
+  value: string;
+  bad: boolean;
 };
 
 export type ChatMessage = {
@@ -59,6 +66,8 @@ export type OfficeSnapshot = {
   bots: Bot[];
   todos: Todo[];
   todayFocus: string | null;
+  metrics: BoardMetric[];
+  updated: string | null;
   statuses: Record<string, string>;
   paths: OfficePaths;
   warnings: string[];
@@ -90,6 +99,6 @@ export type OfficeEvent =
   | { type: "error"; botId: string; messageId: string; message: string }
   | { type: "accepted"; botId: string; messageId: string }
   | { type: "status"; botId: string; status: string }
-  | { type: "todos"; todos: Todo[]; todayFocus: string | null }
+  | { type: "todos"; todos: Todo[]; todayFocus: string | null; metrics: BoardMetric[]; updated: string | null }
   | { type: "message"; botId: string; message: ChatMessage }
   | { type: "warning"; message: string };
