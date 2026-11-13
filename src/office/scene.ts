@@ -1,5 +1,5 @@
 import type { BoardMetric, Bot, Todo } from "../types";
-import { BOARD, layout, paint, seatHit, WORLD_H, WORLD_W, type SceneFrame } from "./draw";
+import { BOARD, headPoint, hotspots, paint, WORLD_H, WORLD_W, type Hotspot, type SceneFrame } from "./draw";
 
 export class OfficeScene {
   private canvas: HTMLCanvasElement;
@@ -14,6 +14,7 @@ export class OfficeScene {
   private updated: string | null = null;
   private focus: string | null = null;
   private selectedId: string | null = null;
+  private hot: Hotspot | null = null;
   private reduceMotion: boolean;
 
   constructor(
@@ -21,6 +22,8 @@ export class OfficeScene {
     private readonly host: HTMLElement,
     private readonly onBot: (id: string) => void,
     private readonly onBoard: () => void,
+    private readonly onOpen: (href: string) => void,
+    private readonly onAnchor: (point: { x: number; y: number } | null) => void,
   ) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
@@ -77,12 +80,19 @@ export class OfficeScene {
       updated: this.updated,
       focus: this.focus,
       selectedId: this.selectedId,
+      hover: this.hot,
       frame: this.frame,
     };
   }
 
+  anchor(id: string | null): { x: number; y: number } | null {
+    if (!id) return null;
+    return headPoint(this.bots, id);
+  }
+
   private draw() {
     paint(this.ctx, this.scene());
+    this.onAnchor(this.selectedId ? this.anchor(this.selectedId) : null);
   }
 
   private fit() {
@@ -106,16 +116,15 @@ export class OfficeScene {
     };
   }
 
-  private hit(x: number, y: number): "board" | string | null {
+  private hit(x: number, y: number): Hotspot | "board" | null {
     if (x >= BOARD.x && x <= BOARD.x + BOARD.w && y >= BOARD.y && y <= BOARD.y + BOARD.h) {
       return "board";
     }
-    const seats = layout(this.bots.length);
-    for (let index = seats.length - 1; index >= 0; index -= 1) {
-      const seat = seats[index];
-      const box = seatHit(seat);
-      if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) {
-        return this.bots[index]?.id ?? null;
+    const spots = hotspots(this.bots);
+    for (let index = spots.length - 1; index >= 0; index -= 1) {
+      const spot = spots[index];
+      if (x >= spot.x && x <= spot.x + spot.w && y >= spot.y && y <= spot.y + spot.h) {
+        return spot;
       }
     }
     return null;
@@ -126,13 +135,21 @@ export class OfficeScene {
     if (!point) return;
     const target = this.hit(point.x, point.y);
     if (target === "board") this.onBoard();
-    else if (target) this.onBot(target);
+    else if (!target) return;
+    else if (target.kind === "head") this.onBot(target.id);
+    else if (target.kind === "computer" && !target.href) this.onBot(target.id);
+    else if (target.href) this.onOpen(target.href);
   }
 
   private hover(event: MouseEvent) {
     const point = this.point(event);
     const target = point ? this.hit(point.x, point.y) : null;
-    this.canvas.style.cursor = target ? "pointer" : "default";
+    const next = target && target !== "board" ? target : null;
+    const changed = next?.kind !== this.hot?.kind || next?.id !== this.hot?.id;
+    this.hot = next;
+    const clickable = target === "board" || (next !== null && (next.kind === "head" || next.kind === "computer" || Boolean(next.href)));
+    this.canvas.style.cursor = clickable ? "pointer" : "default";
+    if (changed) this.draw();
   }
 
   private pause() {
