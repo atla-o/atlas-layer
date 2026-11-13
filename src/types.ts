@@ -1,5 +1,12 @@
 export type ConnectorKind = "local-ollama" | "local-window" | "relay-webhook" | "cursor-agents" | "echo";
 
+export type DeskLinks = {
+  papers?: string | null;
+  drive?: string | null;
+  mug?: string | null;
+  computer?: string | null;
+};
+
 export type Bot = {
   id: string;
   name: string;
@@ -11,6 +18,7 @@ export type Bot = {
   model?: string | null;
   agentId: string;
   agentPinned: boolean;
+  links?: DeskLinks;
 };
 
 export type Todo = {
