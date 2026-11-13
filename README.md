@@ -3,10 +3,10 @@
 Atlas Layer is a desktop overlay from Atla's Creation division. It keeps the machine productive, clean, and earning. It is one window with three independent parts. Each one has a switch in Settings, and each one can be turned off.
 
 - **Office** is the pixel room. Each bot has a chair, a name plate, and a lamp: sage when idle, amber while working, cream when a reply is waiting. The whiteboard is the live to-do list. Click a bot and the chat stays inside the room. Office is on by default. When it is off, the window becomes a small status view instead of the room, and the desk watchers stay quiet.
-- **Filter** is the harmful and NSFW content filter. The switch and the status line are here. The engine is not. Turning it on only arms a stub that reports it is standing by and scanning nothing.
-- **Shared Compute** lends idle compute and earns. It is off by default. It only runs when the machine is idle or plugged in. The panel shows what is running, what has been contributed, and what has been earned, and it can be turned off in one click. The stub reports nothing running and zero earned.
+- **Filter** checks desk text against a local word list for NSFW and harmful phrases. Nothing is uploaded. Turning it off stops scanning. It does not edit the hosts file or DNS.
+- **Shared Compute** runs a capped local Roleplay sim tick when the machine is idle and plugged in. It is off until you turn it on, pauses on battery and while you are using the app, and counts credits on this computer. There is no paid payout network. The same `SpareEngine` interface is what another Creation sim can call.
 
-Filter and Shared Compute are meant to move into a small background daemon. The app already talks to them through a JSON contract in `src-tauri/src/services/mod.rs` (`ServiceRequest` / `ServiceReport`, plus the `BackgroundService` trait). `MockService` answers in-process and starts no threads. A later socket client can speak the same messages without changing Settings.
+Filter and Shared Compute run in this app. They still speak `ServiceRequest` / `ServiceReport` from `src-tauri/src/services/mod.rs`, so a later socket daemon can take over without changing Settings. `MockService` remains the contract fixture in tests. Shared Compute's `SpareEngine` is the reusable piece.
 
 Nothing personal is baked in. Desks, paths, connector settings, and the three switches come from config. Secrets come from the environment or the system keyring, never from the config file, and they are not written to the log.
 
