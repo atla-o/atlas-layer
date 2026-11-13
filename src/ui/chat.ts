@@ -1,4 +1,5 @@
 import { bindCursorAgent, closeBot, openBot, refreshCursorAgents, sendMessage } from "../bridge";
+import { WORLD_H, WORLD_W } from "../office/draw";
 import type { Bot, ChatMessage, OfficeEvent, RemoteAgent } from "../types";
 
 const root = () => document.querySelector<HTMLElement>("#chat")!;
@@ -53,6 +54,40 @@ export class ChatPanel {
       this.setWarning(error instanceof Error ? error.message : "The desk did not open.");
     }
     document.querySelector<HTMLTextAreaElement>("#chat-input")!.focus();
+    this.place(this.anchor);
+  }
+
+  private anchor: { x: number; y: number } | null = null;
+
+  place(point: { x: number; y: number } | null) {
+    if (point) this.anchor = point;
+    if (!this.bot || !this.anchor) return;
+    const bubble = root();
+    const canvas = document.querySelector<HTMLCanvasElement>("#office");
+    const floor = document.querySelector<HTMLElement>("#floor");
+    if (!canvas || !floor) return;
+    const canvasBox = canvas.getBoundingClientRect();
+    const floorBox = floor.getBoundingClientRect();
+    if (canvasBox.width === 0 || canvasBox.height === 0) return;
+    const headX = canvasBox.left - floorBox.left + (this.anchor.x * canvasBox.width) / WORLD_W;
+    const headY = canvasBox.top - floorBox.top + (this.anchor.y * canvasBox.height) / WORLD_H;
+    const width = bubble.offsetWidth || 280;
+    const height = bubble.offsetHeight || 180;
+    let left = headX - 36;
+    let top = headY - height - 16;
+    let tail: "down" | "left" = "down";
+    if (top < 4) {
+      tail = "left";
+      top = Math.max(4, headY - 24);
+      left = headX + 18;
+    }
+    left = Math.max(4, Math.min(left, floor.clientWidth - width - 4));
+    top = Math.max(4, Math.min(top, floor.clientHeight - height - 4));
+    bubble.style.left = `${left}px`;
+    bubble.style.top = `${top}px`;
+    bubble.dataset.tail = tail;
+    const tailX = Math.max(18, Math.min(headX - left, width - 18));
+    bubble.style.setProperty("--tail-x", `${tailX}px`);
   }
 
   async close() {
@@ -223,6 +258,7 @@ export class ChatPanel {
       log.append(bubble);
     }
     log.scrollTop = log.scrollHeight;
+    this.place(this.anchor);
     const last = this.messages[this.messages.length - 1];
     const waits =
       this.bot?.connector === "relay-webhook" || this.bot?.connector === "local-window";
