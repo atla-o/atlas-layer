@@ -1,9 +1,11 @@
 import { addTodo, toggleTodo } from "../bridge";
-import type { OfficeSnapshot, Todo } from "../types";
+import type { BoardMetric, OfficeSnapshot, Todo } from "../types";
 
 export class Board {
   private todos: Todo[] = [];
   private focus: string | null = null;
+  private metrics: BoardMetric[] = [];
+  private updated: string | null = null;
   private path = "";
   private busy = false;
 
@@ -17,10 +19,12 @@ export class Board {
     });
   }
 
-  set(todos: Todo[], focus: string | null, path: string) {
-    this.todos = todos;
-    this.focus = focus;
-    this.path = path;
+  set(snapshot: OfficeSnapshot) {
+    this.todos = snapshot.todos;
+    this.focus = snapshot.metrics.length ? null : snapshot.todayFocus;
+    this.metrics = snapshot.metrics;
+    this.updated = snapshot.updated;
+    this.path = snapshot.paths.todo;
     this.render();
   }
 
@@ -35,6 +39,22 @@ export class Board {
     const focus = document.querySelector<HTMLElement>("#board-focus")!;
     focus.hidden = !this.focus;
     focus.textContent = this.focus ?? "";
+    const metrics = document.querySelector<HTMLElement>("#board-metrics")!;
+    metrics.replaceChildren();
+    metrics.hidden = this.metrics.length === 0;
+    for (const metric of this.metrics) {
+      const tile = document.createElement("div");
+      tile.className = metric.bad ? "metric bad" : "metric";
+      const value = document.createElement("b");
+      value.textContent = metric.value;
+      const label = document.createElement("span");
+      label.textContent = metric.label;
+      tile.append(value, label);
+      metrics.append(tile);
+    }
+    const updated = document.querySelector<HTMLElement>("#board-updated")!;
+    updated.hidden = !this.updated;
+    updated.textContent = this.updated ?? "";
     document.querySelector("#todo-path")!.textContent = this.path
       ? `Saved to ${this.path}. Items from the today cache are copied in when you check them.`
       : "";
@@ -45,6 +65,10 @@ export class Board {
     for (const item of this.todos) {
       const li = document.createElement("li");
       if (item.done) li.classList.add("done");
+      if (item.today) li.classList.add("today");
+      const dot = document.createElement("span");
+      dot.className = item.today ? "dot today" : "dot";
+      dot.setAttribute("aria-hidden", "true");
       const label = document.createElement("label");
       const box = document.createElement("input");
       box.type = "checkbox";
@@ -53,6 +77,7 @@ export class Board {
         void this.toggle(item.id);
       });
       const text = document.createElement("span");
+      text.className = "title";
       text.textContent = item.text;
       label.append(box, text);
       if (item.source === "today") {
@@ -61,7 +86,7 @@ export class Board {
         tag.textContent = "today";
         label.append(tag);
       }
-      li.append(label);
+      li.append(dot, label);
       list.append(li);
     }
   }
