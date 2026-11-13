@@ -10,11 +10,13 @@ pub struct RelayConnector {
     pub client: reqwest::Client,
 }
 
-pub fn relay_body(bot: &str, text: &str, reply_to_id: &str) -> Value {
+pub fn relay_body(bot: &str, text: &str, message_id: &str) -> Value {
     serde_json::json!({
         "bot": bot,
+        "desk": bot,
+        "id": message_id,
         "text": text,
-        "reply_to_id": reply_to_id,
+        "reply_to_id": message_id,
     })
 }
 
