@@ -136,6 +136,7 @@ The sample list is `examples/todo.json`. The demo also merges `examples/today.js
 
 `id` is the stable key (letters, numbers, hyphens, underscores, up to 64 characters). It is what the relay sends in `bot`, and it is the history filename. `connector` is one of:
 
+- `local-window` — the local Atlas window. The seed desk Local Atlas uses this. `local-ollama` is still available if you point a desk back at a model.
 - `local-ollama` — a model on this machine. Optional `model` (default `qwen3:8b`) and `systemPrompt`.
 - `relay-webhook` — Atlas and the other cloud desks. They all post to the same URL. The `bot` field is the router.
 - `cursor-agents` — a Cursor cloud agent. Optional `agentId`. If it is empty, a unique name match from the API is used in memory. Pinning one from the chat writes `agentId` back and leaves every other field alone.
@@ -145,7 +146,9 @@ The seed list is Atlas, Products, Consumed, Creation, Covenant, Wellness, Modifi
 
 ## Whiteboard
 
-The board shows `paths.todo`, then any items from `paths.today` whose id is not already on the todo list. Checking a today-only item copies it into `todo.json` and flips it there. The today file is never written.
+The board shows `paths.todo`, then any items from `paths.today` whose id is not already on the todo list. Checking a today-only item copies it into `todo.json` and flips it there. The today file is never written. A task with `today: true` is today's priority: a filled red dot, sorted ahead of the others. Every other task gets a hollow dot.
+
+When `paths.today` has a `metrics` array, the board draws those as tiles (a large value over a small label). `bad: true` values are red. The `focus` string is hidden in that case, because it repeats the tiles. `updated` is shown in small type at the bottom. Unknown fields on the file, the metrics, and the tasks are left alone. On the small wall board, tiles wrap and long titles are cut to fit.
 
 Accepted todo shapes, both for the todo file and the today cache:
 
@@ -171,6 +174,14 @@ What you send and what the bot sends back are the same text in both places: the 
 
 Each connector is a Rust `BotConnector` with an adapter behind it (`OllamaConnector`, `RelayConnector`, `CursorConnector`, `EchoConnector`). The desk's `connector` field picks the adapter.
 
+### local-window
+
+The Local Atlas desk. On send, Layer writes the message text to `config.localWindow.inboxDir` (default `~/Atla/AI/inbox`) as `layer-<message id>.md`, via a `.tmp` file renamed into place. The window only picks up `*.md`. If no process named `atlas-window` is running, Layer starts one and does not wait on it: `gtk-launch atlas-window`, then `~/bin/atlas-window`. Set `config.localWindow.launchCommand` to replace both of those (a program and args separated by spaces).
+
+The window keeps its own chat. It writes the reply into the office inbox as `{"bot":"local-atlas","text":"…","in_reply_to":"<message id>"}`, which Layer already reads into that desk's history.
+
+`local-ollama` is unchanged. Point a desk at it when you want the model instead of the window.
+
 ### local-ollama
 
 `POST {baseUrl}/api/chat` with `stream: true`, the model (`qwen3:8b` unless the desk or `ollama.model` says otherwise), and the recent history. If `paths.personality` exists it is sent as the system message, unless the desk sets `systemPrompt`. Tokens are the `message.content` fields. `message.thinking` is shown only when the model never produced content.
@@ -184,10 +195,16 @@ Used for Atlas and every other cloud desk. One URL, one auth header. The desk id
 `POST` JSON:
 
 ```json
-{ "bot": "products", "text": "Sketch the shelf", "reply_to_id": "m-…" }
+{
+  "bot": "products",
+  "desk": "products",
+  "id": "m-…",
+  "text": "Sketch the shelf",
+  "reply_to_id": "m-…"
+}
 ```
 
-`reply_to_id` is the id of the user message just stored in history. Send it back as `in_reply_to`.
+`desk` and `bot` are the desk id. `id` and `reply_to_id` are the user message id. `text` is the full message. That is enough to copy the same line into the Grok Bot chat. Send the reply back with `in_reply_to` set to that id. The desk stores it and shows it threaded under that message.
 
 The URL is `relay.url`, unless `relay.urlEnv` (default `ATLAS_LAYER_WEBHOOK_URL`) is set. The Authorization value is `relay.authEnv` (default `ATLAS_LAYER_WEBHOOK_AUTH`) or, if that is empty, the keyring account `relay.authKeyringAccount` (default `webhook-auth`). A value with no space is sent as `Bearer <value>`. `Bearer …` and `Basic …` are sent as written. The header is omitted when no secret is set. A config carried over from `~/.config/atla-office` keeps the env var names it already had.
 
