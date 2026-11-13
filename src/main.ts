@@ -1,4 +1,4 @@
-import { loadOffice, onOfficeEvent, watchFocus, watchOffice } from "./bridge";
+import { loadOffice, onOfficeEvent, openExternal, watchFocus, watchOffice } from "./bridge";
 import { OfficeScene } from "./office/scene";
 import type { OfficeEvent, OfficeSnapshot } from "./types";
 import { Board } from "./ui/board";
@@ -22,6 +22,10 @@ const scene = new OfficeScene(
     void chat.open(bot);
   },
   () => board.open(),
+  (href) => {
+    void openExternal(href);
+  },
+  (point) => chat.place(point),
 );
 
 const board = new Board((next) => applySnapshot(next));
