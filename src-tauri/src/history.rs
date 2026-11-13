@@ -62,6 +62,68 @@ fn append_locked(path: &Path, message: &StoredMessage) -> Result<(), String> {
     Ok(())
 }
 
+/// True when this role and text are already the same exchange.
+/// A missing `in_reply_to` on either side still counts, so a reply that
+/// arrives both in an HTTP body and in the inbox is stored once.
+pub fn already_mirrored(path: &Path, role: &str, text: &str, in_reply_to: Option<&str>) -> bool {
+    let text = text.trim();
+    read_all(path).iter().any(|message| {
+        if message.role != role || message.text.trim() != text {
+            return false;
+        }
+        match (message.in_reply_to.as_deref(), in_reply_to) {
+            (Some(stored), Some(incoming)) => stored == incoming,
+            _ => true,
+        }
+    })
+}
+
+/// Copies a remote transcript into the desk history.
+/// A line whose text is already stored without a remote id is linked in
+/// place. Only lines the desk has never shown are appended.
+pub fn mirror_lines(
+    path: &Path,
+    lines: &[TranscriptLine],
+    assistant_read: bool,
+) -> Result<Vec<StoredMessage>, String> {
+    let _guard = lock();
+    let mut messages = read_all_locked(path);
+    let mut known: std::collections::HashSet<String> = messages
+        .iter()
+        .filter_map(|message| message.remote_id.clone())
+        .collect();
+    let mut added = Vec::new();
+    let mut linked = false;
+    for line in lines {
+        let text = line.text.trim();
+        if text.is_empty() || !known.insert(line.remote_id.clone()) {
+            continue;
+        }
+        if let Some(existing) = messages.iter_mut().find(|message| {
+            message.remote_id.is_none() && message.role == line.role && message.text.trim() == text
+        }) {
+            existing.remote_id = Some(line.remote_id.clone());
+            linked = true;
+            continue;
+        }
+        let message = StoredMessage {
+            id: format!("remote-{}", line.remote_id),
+            role: line.role.clone(),
+            text: text.to_string(),
+            ts: line.ts.clone().unwrap_or_else(crate::model::now_iso),
+            read: line.role != "assistant" || assistant_read,
+            in_reply_to: None,
+            remote_id: Some(line.remote_id.clone()),
+        };
+        messages.push(message.clone());
+        added.push(message);
+    }
+    if linked || !added.is_empty() {
+        rewrite_locked(path, &messages)?;
+    }
+    Ok(added)
+}
+
 /// Appends unless a message with the same id is already stored.
 pub fn append_unique(path: &Path, message: &StoredMessage) -> Result<bool, String> {
     let _guard = lock();
@@ -95,30 +157,7 @@ pub fn mark_read(path: &Path) -> Result<(), String> {
 }
 
 pub fn import_remote(path: &Path, lines: &[TranscriptLine]) -> Result<usize, String> {
-    let _guard = lock();
-    let existing = read_all_locked(path);
-    let mut known: std::collections::HashSet<String> = existing
-        .iter()
-        .filter_map(|message| message.remote_id.clone())
-        .collect();
-    let mut added = 0;
-    for line in lines {
-        if line.text.trim().is_empty() || !known.insert(line.remote_id.clone()) {
-            continue;
-        }
-        let message = StoredMessage {
-            id: format!("remote-{}", line.remote_id),
-            role: line.role.clone(),
-            text: line.text.clone(),
-            ts: line.ts.clone().unwrap_or_else(crate::model::now_iso),
-            read: true,
-            in_reply_to: None,
-            remote_id: Some(line.remote_id.clone()),
-        };
-        append_locked(path, &message)?;
-        added += 1;
-    }
-    Ok(added)
+    Ok(mirror_lines(path, lines, true)?.len())
 }
 
 fn rewrite_locked(path: &Path, messages: &[StoredMessage]) -> Result<(), String> {
