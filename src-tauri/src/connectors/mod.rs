@@ -4,6 +4,7 @@ use crate::model::StoredMessage;
 
 pub mod cursor;
 pub mod echo;
+pub mod local_window;
 pub mod ollama;
 pub mod relay;
 
@@ -47,6 +48,7 @@ pub trait BotConnector: Send + Sync {
 
 pub enum Connector {
     Ollama(ollama::OllamaConnector),
+    LocalWindow(local_window::LocalWindowConnector),
     Relay(relay::RelayConnector),
     Cursor(cursor::CursorConnector),
     Echo(echo::EchoConnector),
@@ -60,6 +62,7 @@ impl Connector {
     ) -> Result<DispatchOutcome, String> {
         match self {
             Self::Ollama(connector) => connector.dispatch(req, tokens).await,
+            Self::LocalWindow(connector) => connector.dispatch(req, tokens).await,
             Self::Relay(connector) => connector.dispatch(req, tokens).await,
             Self::Cursor(connector) => connector.dispatch(req, tokens).await,
             Self::Echo(connector) => connector.dispatch(req, tokens).await,
