@@ -249,6 +249,8 @@ npm run tauri dev
 
 The dev window loads Vite at <http://127.0.0.1:47331>. Opening that URL in a browser shows the same room with an in-memory echo, labeled as a preview. The desktop window is the one wired to the connectors.
 
+`node scripts/gen-icon.mjs` writes the desktop icons and `src-tauri/icons/icon.png`. Tauri embeds that file at compile time. `cargo build` runs the script when the icon is not already there, so a fresh clone does not stop on a missing `icons/icon.png`.
+
 `cargo test` covers the whiteboard round-trip (unknown fields kept, a broken file not overwritten), the relay body and Authorization header, Ollama streaming, the Cursor list / follow-up / conversation against a mock, and the inbox directory and JSONL tail.
 
 ## Layout
@@ -260,4 +262,5 @@ assets/defaults/      seed config and desks
 examples/             sample todo, today cache, personality, inbox file
 scripts/install.sh    ~/.local install
 packaging/            .desktop template and the O mark icon
+src-tauri/icons/      window icon embedded by Tauri (`icon.png`)
 ```
