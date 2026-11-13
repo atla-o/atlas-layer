@@ -364,6 +364,9 @@ async fn send_message(
     tauri::async_runtime::spawn(async move {
         let result = run_dispatch(&app_task, &state_task, &bot_task, &user_task).await;
         settle(&app_task, &state_task, &bot_task.id, &user_task.id, result).await;
+        if bot_task.connector == "cursor-agents" {
+            mirror_cursor_desks(&app_task, &state_task, Some(&bot_task.id)).await;
+        }
     });
     Ok(user)
 }
@@ -838,6 +841,81 @@ async fn apply_agent_list(app: &AppHandle, state: &AppState, agents: &[RemoteAge
     }
 }
 
+/// Pulls each Cursor agent's transcript into that desk's history and shows
+/// any line the desk has not already stored. Skips a desk that is mid-send
+/// so the reply just streamed is not written twice.
+async fn mirror_cursor_desks(app: &AppHandle, state: &AppState, only_bot: Option<&str>) {
+    let desks: Vec<(String, String, std::path::PathBuf, bool)> = {
+        let data = state.data.lock().await;
+        if !data.config.features.office {
+            return;
+        }
+        let mut desks = Vec::new();
+        for bot in &data.bots {
+            if bot.connector != "cursor-agents" {
+                continue;
+            }
+            if only_bot.is_some_and(|id| id != bot.id) {
+                continue;
+            }
+            if only_bot.is_none() && data.inflight.contains(&bot.id) {
+                continue;
+            }
+            let Some(agent_id) = effective_agent(&data, bot) else {
+                continue;
+            };
+            let Ok(history_path) = history::path_for(&data.paths.history, &bot.id) else {
+                continue;
+            };
+            desks.push((
+                bot.id.clone(),
+                agent_id,
+                history_path,
+                data.focus.as_deref() == Some(bot.id.as_str()),
+            ));
+        }
+        desks
+    };
+    for (bot_id, agent_id, history_path, focused) in desks {
+        let Ok(connector) = cursor_from_state(state, &agent_id).await else {
+            continue;
+        };
+        let Ok(lines) = connector.transcript().await else {
+            continue;
+        };
+        let Ok(added) = history::mirror_lines(&history_path, &lines, focused) else {
+            continue;
+        };
+        let mut unseen = false;
+        for message in added {
+            if message.role == "assistant" && !message.read {
+                unseen = true;
+            }
+            emit(
+                app,
+                &UiEvent::Message {
+                    bot_id: bot_id.clone(),
+                    message,
+                },
+            );
+        }
+        if unseen {
+            let mut data = state.data.lock().await;
+            if !data.inflight.contains(&bot_id) && data.focus.as_deref() != Some(bot_id.as_str()) {
+                data.statuses.insert(bot_id.clone(), "message".into());
+                drop(data);
+                emit(
+                    app,
+                    &UiEvent::Status {
+                        bot_id,
+                        status: "message".into(),
+                    },
+                );
+            }
+        }
+    }
+}
+
 fn start_poll(app: AppHandle, state: AppState) {
     tauri::async_runtime::spawn(async move {
         let seconds = {
@@ -869,6 +947,7 @@ fn start_poll(app: AppHandle, state: AppState) {
                     apply_agent_list(&app, &state, &agents).await;
                 }
             }
+            mirror_cursor_desks(&app, &state, None).await;
         }
     });
 }
@@ -1067,6 +1146,14 @@ fn deliver(app: &AppHandle, state: &AppState, reply: &InboxReply, source: &str) 
         let focused = data.focus.as_deref() == Some(bot_id.as_str());
         (bot_id, history_path, focused)
     };
+    if history::already_mirrored(
+        &history_path,
+        "assistant",
+        &reply.text,
+        reply.in_reply_to.as_deref(),
+    ) {
+        return;
+    }
     let message = StoredMessage {
         id: inbox::content_id(source, reply),
         role: "assistant".into(),
