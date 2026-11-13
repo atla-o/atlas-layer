@@ -74,4 +74,12 @@ const outDir = path.join(root, "packaging");
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "icon-128.png"), icon(128));
 fs.writeFileSync(path.join(outDir, "icon-48.png"), icon(48));
+
+// Tauri embeds this path at compile time (icons/icon.png), even when bundling is off.
+const tauriIcons = path.join(root, "src-tauri", "icons");
+fs.mkdirSync(tauriIcons, { recursive: true });
+fs.writeFileSync(path.join(tauriIcons, "icon.png"), icon(128));
+
 console.log("wrote packaging/icon-128.png");
+console.log("wrote packaging/icon-48.png");
+console.log("wrote src-tauri/icons/icon.png");
