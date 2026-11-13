@@ -56,7 +56,7 @@ cd atlas-layer
 atlas-layer
 ```
 
-`install.sh` builds a release binary, copies it to `~/.local/bin/atlas-layer`, installs a `.desktop` file and icon under `~/.local`, and writes a starter config if you do not already have one.
+`install.sh` builds a release binary with the `custom-protocol` feature, so the window loads the files baked into the binary instead of the Vite dev server at `http://127.0.0.1:47331`. It copies that binary to `~/.local/bin/atlas-layer`, installs a `.desktop` file and icon under `~/.local`, and writes a starter config if you do not already have one.
 
 Or search for “Atlas Layer” in the KDE menu. `~/.local/bin` needs to be on your `PATH` (it is, for a normal Fedora login).
 
