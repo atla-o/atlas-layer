@@ -244,6 +244,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   overflow-wrap: anywhere;
 }
 
+.bubble.thread { margin-left: 18px; max-width: calc(92% - 18px); }
+
 .bubble.user {
   align-self: flex-end;
   background: #f0d7b4;
@@ -412,12 +414,58 @@ dialog::backdrop { background: rgba(36, 28, 23, 0.35); }
   overflow: auto;
 }
 
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.metric {
+  flex: 1 1 72px;
+  min-width: 72px;
+  max-width: 100%;
+  padding: 6px 8px 4px;
+  border: 2px solid var(--ink);
+  background: var(--cream);
+}
+
+.metric b,
+.metric span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric b { font-size: 22px; line-height: 1.1; }
+.metric span { margin-top: 2px; font-size: 11px; color: var(--ink-soft); }
+.metric.bad b { color: var(--terra); }
+
 #todo-list li {
   display: flex;
   gap: 8px;
   align-items: flex-start;
   padding: 6px 0;
   border-bottom: 1px solid #e4d8c6;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border: 2px solid var(--terra);
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot.today { background: var(--terra); }
+
+#todo-list .title {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 #todo-list label {
