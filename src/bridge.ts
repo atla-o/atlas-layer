@@ -47,11 +47,12 @@ function seedBots(): Bot[] {
   }));
 }
 
-function sampleTodos(): { todos: Todo[]; focus: string | null } {
+function sampleTodos(): { todos: Todo[]; focus: string | null; metrics: OfficeSnapshot["metrics"]; updated: string | null } {
   const todos: Todo[] = sampleTodo.items.map((item) => ({
     id: item.id,
     text: item.text,
     done: item.done,
+    today: false,
     source: "todo",
   }));
   const seen = new Set(todos.map((item) => item.id));
@@ -61,10 +62,14 @@ function sampleTodos(): { todos: Todo[]; focus: string | null } {
       id: task.id,
       text: task.title,
       done: task.completed,
+      today: Boolean("today" in task && task.today),
       source: "today",
     });
   }
-  return { todos, focus: sampleToday.focus };
+  todos.sort((left, right) => Number(right.today) - Number(left.today));
+  const metrics = "metrics" in sampleToday && Array.isArray(sampleToday.metrics) ? sampleToday.metrics : [];
+  const updated = "updated" in sampleToday && typeof sampleToday.updated === "string" ? sampleToday.updated : null;
+  return { todos, focus: metrics.length ? null : sampleToday.focus, metrics, updated };
 }
 
 type PreviewState = {
@@ -134,6 +139,8 @@ function freshPreview(): PreviewState {
       bots: seedBots(),
       todos: board.todos,
       todayFocus: board.focus,
+      metrics: board.metrics,
+      updated: board.updated,
       statuses,
       paths: {
         todo: "examples/todo.json",
@@ -169,6 +176,9 @@ function loadPreview(): PreviewState {
       filter: serviceReport("filter", flags.filter),
       sharedCompute: serviceReport("sharedCompute", flags.sharedCompute),
     };
+    parsed.snapshot.metrics = parsed.snapshot.metrics ?? [];
+    parsed.snapshot.updated = parsed.snapshot.updated ?? null;
+    parsed.snapshot.todos = parsed.snapshot.todos.map((item) => ({ ...item, today: Boolean(item.today) }));
     return parsed;
   } catch {
     return freshPreview();
@@ -249,11 +259,18 @@ export async function addTodo(text: string): Promise<OfficeSnapshot> {
       id: `m-${crypto.randomUUID()}`,
       text: text.trim(),
       done: false,
+      today: false,
       source: "todo",
     };
     preview.snapshot.todos = [...preview.snapshot.todos, item];
     savePreview();
-    emit({ type: "todos", todos: preview.snapshot.todos, todayFocus: preview.snapshot.todayFocus });
+    emit({
+      type: "todos",
+      todos: preview.snapshot.todos,
+      todayFocus: preview.snapshot.todayFocus,
+      metrics: preview.snapshot.metrics,
+      updated: preview.snapshot.updated,
+    });
     return structuredClone(preview.snapshot);
   }
   return invoke<OfficeSnapshot>("add_todo", { text });
@@ -265,7 +282,13 @@ export async function toggleTodo(id: string): Promise<OfficeSnapshot> {
       item.id === id ? { ...item, done: !item.done, source: item.source === "today" ? "todo" : item.source } : item,
     );
     savePreview();
-    emit({ type: "todos", todos: preview.snapshot.todos, todayFocus: preview.snapshot.todayFocus });
+    emit({
+      type: "todos",
+      todos: preview.snapshot.todos,
+      todayFocus: preview.snapshot.todayFocus,
+      metrics: preview.snapshot.metrics,
+      updated: preview.snapshot.updated,
+    });
     return structuredClone(preview.snapshot);
   }
   return invoke<OfficeSnapshot>("toggle_todo", { id });
