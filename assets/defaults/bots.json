@@ -76,7 +76,7 @@
       "id": "local-atlas",
       "name": "Local Atlas",
       "role": "On-device",
-      "connector": "local-ollama",
+      "connector": "local-window",
       "accent": "#c45c3e",
       "hair": "#241c17",
       "accessory": "chip",
