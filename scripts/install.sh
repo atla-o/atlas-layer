@@ -24,9 +24,12 @@ cfg="${XDG_CONFIG_HOME:-$HOME/.config}/atlas-layer"
 legacy="${XDG_CONFIG_HOME:-$HOME/.config}/atla-office"
 mkdir -p "$bindir" "$appdir" "$icondir/128x128/apps" "$icondir/48x48/apps" "$cfg"
 
-# `install` is a shell function on some machines and would swallow -m.
-cp src-tauri/target/release/atlas-layer "$bindir/atlas-layer"
-chmod 755 "$bindir/atlas-layer"
+# Replace the running binary by renaming in the same directory. A direct
+# copy onto a file that is executing fails with "Text file busy".
+tmp="${bindir}/atlas-layer.tmp.$$"
+cp src-tauri/target/release/atlas-layer "$tmp"
+chmod 755 "$tmp"
+mv -f "$tmp" "$bindir/atlas-layer"
 cp packaging/icon-128.png "$icondir/128x128/apps/atlas-layer.png"
 chmod 644 "$icondir/128x128/apps/atlas-layer.png"
 cp packaging/icon-48.png "$icondir/48x48/apps/atlas-layer.png"
