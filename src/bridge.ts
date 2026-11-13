@@ -93,9 +93,9 @@ function serviceReport(feature: "filter" | "sharedCompute", enabled: boolean): S
           feature,
           enabled,
           phase: "standing-by",
-          detail: "Armed. The filter engine is not installed yet, so nothing is scanned.",
-          running: "Nothing",
-          contributed: "0",
+          detail: "On. A local word list checks desk text on this machine. Nothing is uploaded.",
+          running: "Local list",
+          contributed: "0 held",
           earned: "0",
         }
       : {
@@ -113,10 +113,10 @@ function serviceReport(feature: "filter" | "sharedCompute", enabled: boolean): S
         feature,
         enabled,
         phase: "idle-wait",
-        detail: "On, and waiting. Shared Compute only runs when this machine is idle or plugged in.",
-        running: "Nothing",
-        contributed: "0",
-        earned: "0",
+        detail: "On, and paused while you are using the machine. Credits stay on this computer.",
+        running: "Paused",
+        contributed: "0 ticks",
+        earned: "0 credits",
       }
     : {
         feature,

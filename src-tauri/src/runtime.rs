@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,6 +7,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
+use crate::compute::{battery_discharging, LocalCompute, SpareEngine};
 use crate::config::{self, effective_agent, load_office, ollama_base, relay_url, OfficeData};
 use crate::connectors::cursor::{self, CursorConnector, RemoteAgent};
 use crate::connectors::echo::EchoConnector;
@@ -13,6 +15,7 @@ use crate::connectors::local_window::LocalWindowConnector;
 use crate::connectors::ollama::OllamaConnector;
 use crate::connectors::relay::RelayConnector;
 use crate::connectors::{self, Connector, DispatchOutcome, Outbound, TokenTx};
+use crate::filter;
 use crate::history;
 use crate::inbox::{self, InboxReply};
 use crate::model::{
@@ -26,6 +29,8 @@ use crate::todos;
 pub struct AppState {
     pub data: Arc<Mutex<OfficeData>>,
     pub client: reqwest::Client,
+    pub compute: Arc<Mutex<LocalCompute>>,
+    pub filter_holds: Arc<AtomicU64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -125,15 +130,20 @@ pub fn boot() -> AppState {
         .build()
         .expect("http client");
     let office = load_office(&config::resolve_config_dir());
+    let compute_path = office.paths.history.join("compute.txt");
+    let compute = LocalCompute::load(&compute_path, office.config.features.shared_compute);
     AppState {
         data: Arc::new(Mutex::new(office)),
         client,
+        compute: Arc::new(Mutex::new(compute)),
+        filter_holds: Arc::new(AtomicU64::new(0)),
     }
 }
 
 pub fn start_background(app: AppHandle, state: AppState) {
     start_watcher(app.clone(), state.clone());
-    start_poll(app, state);
+    start_poll(app, state.clone());
+    start_compute(state);
 }
 
 fn emit(app: &AppHandle, event: &UiEvent) {
@@ -142,11 +152,13 @@ fn emit(app: &AppHandle, event: &UiEvent) {
 
 #[tauri::command]
 async fn get_office_state(state: State<'_, AppState>) -> Result<OfficeSnapshot, String> {
+    note_activity(&state).await;
+    let services = services_of(&state).await;
     let mut data = state.data.lock().await;
-    snapshot(&mut data)
+    snapshot(&mut data, services)
 }
 
-fn snapshot(data: &mut OfficeData) -> Result<OfficeSnapshot, String> {
+fn snapshot(data: &mut OfficeData, services: ServicesDto) -> Result<OfficeSnapshot, String> {
     let mut warnings = data.warnings.clone();
     let (todos, today_focus, metrics, updated) =
         match todos::view(&data.paths.todo, &data.paths.today) {
@@ -195,16 +207,56 @@ fn snapshot(data: &mut OfficeData) -> Result<OfficeSnapshot, String> {
         warnings,
         preview: false,
         features: data.config.features.clone(),
-        services: service_readout(&data.config.features),
+        services,
     })
 }
 
-fn service_readout(features: &config::FeaturesCfg) -> ServicesDto {
-    let (filter, shared_compute) =
-        MockService::from_flags(features.filter, features.shared_compute).pair();
+async fn note_activity(state: &AppState) {
+    state.compute.lock().await.note_activity();
+}
+
+async fn services_of(state: &AppState) -> ServicesDto {
+    let holds = state.filter_holds.load(Ordering::Relaxed);
+    let filter_on = state.data.lock().await.config.features.filter;
+    let shared_compute = state.compute.lock().await.report();
     ServicesDto {
-        filter,
+        filter: filter_report(filter_on, holds),
         shared_compute,
+    }
+}
+
+fn filter_report(enabled: bool, holds: u64) -> ServiceReport {
+    ServiceReport {
+        feature: "filter".into(),
+        enabled,
+        phase: if enabled {
+            "scanning".into()
+        } else {
+            "off".into()
+        },
+        detail: if enabled {
+            "On. A local word list checks desk text on this machine. Nothing is uploaded, and turning this off stops scanning."
+        } else {
+            "Off. Desk text is not scanned. No hosts file or DNS setting was changed."
+        }
+        .into(),
+        running: if enabled {
+            "Local list".into()
+        } else {
+            "Nothing".into()
+        },
+        contributed: format!("{holds} held"),
+        earned: "0".into(),
+    }
+}
+
+async fn gate_text(state: &AppState, text: String) -> String {
+    let enabled = state.data.lock().await.config.features.filter;
+    if enabled && filter::blocked(&text).is_some() {
+        state.filter_holds.fetch_add(1, Ordering::Relaxed);
+        filter::held_text().to_string()
+    } else {
+        text
     }
 }
 
@@ -327,6 +379,11 @@ async fn send_message(
     if text.chars().count() > 8_000 {
         return Err("That message is too long for the desk.".into());
     }
+    note_activity(&state).await;
+    if state.data.lock().await.config.features.filter && filter::blocked(&text).is_some() {
+        state.filter_holds.fetch_add(1, Ordering::Relaxed);
+        return Err("The local filter held that message. Nothing was sent.".into());
+    }
     let bot_id = safe_bot_id(&bot_id).ok_or("Unknown desk")?.to_string();
     let (bot, history_path) = {
         let data = state.data.lock().await;
@@ -393,8 +450,10 @@ async fn add_todo(
     };
     let view = todos::add(&todo, &today, &text)?;
     publish_board(&app, &state, &view).await;
+    note_activity(&state).await;
+    let services = services_of(&state).await;
     let mut data = state.data.lock().await;
-    snapshot(&mut data)
+    snapshot(&mut data, services)
 }
 
 #[tauri::command]
@@ -409,8 +468,10 @@ async fn toggle_todo(
     };
     let view = todos::toggle(&todo, &today, &id)?;
     publish_board(&app, &state, &view).await;
+    note_activity(&state).await;
+    let services = services_of(&state).await;
     let mut data = state.data.lock().await;
-    snapshot(&mut data)
+    snapshot(&mut data, services)
 }
 
 #[tauri::command]
@@ -444,7 +505,20 @@ async fn set_feature(
         "sharedCompute" => data.config.features.shared_compute = enabled,
         _ => {}
     }
-    snapshot(&mut data)
+    let filter_on = data.config.features.filter;
+    let compute_on = data.config.features.shared_compute;
+    drop(data);
+    if key == "sharedCompute" {
+        state.compute.lock().await.set_enabled(enabled);
+    }
+    note_activity(&state).await;
+    let mut services = services_of(&state).await;
+    services.filter = filter_report(filter_on, state.filter_holds.load(Ordering::Relaxed));
+    if !compute_on {
+        services.shared_compute.enabled = false;
+    }
+    let mut data = state.data.lock().await;
+    snapshot(&mut data, services)
 }
 
 #[tauri::command]
@@ -715,6 +789,7 @@ async fn settle(
     };
     match result {
         Ok(DispatchOutcome::Reply(text)) => {
+            let text = gate_text(state, text).await;
             let focused = {
                 let data = state.data.lock().await;
                 data.focus.as_deref() == Some(bot_id)
@@ -942,6 +1017,37 @@ async fn mirror_cursor_desks(app: &AppHandle, state: &AppState, only_bot: Option
             }
         }
     }
+}
+
+fn start_compute(state: AppState) {
+    let path = {
+        let data = state.data.blocking_lock();
+        data.paths.history.join("compute.txt")
+    };
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            let on_battery = battery_discharging(&battery_statuses());
+            let mut engine = state.compute.lock().await;
+            engine.tick(on_battery);
+            engine.save(&path);
+        }
+    });
+}
+
+fn battery_statuses() -> Vec<String> {
+    let mut found = Vec::new();
+    let Ok(dir) = std::fs::read_dir("/sys/class/power_supply") else {
+        return found;
+    };
+    for entry in dir.flatten() {
+        if let Ok(text) = std::fs::read_to_string(entry.path().join("status")) {
+            found.push(text.trim().to_string());
+        }
+    }
+    found
 }
 
 fn start_poll(app: AppHandle, state: AppState) {
@@ -1184,10 +1290,19 @@ fn deliver(app: &AppHandle, state: &AppState, reply: &InboxReply, source: &str) 
     ) {
         return;
     }
+    let text = {
+        let enabled = state.data.blocking_lock().config.features.filter;
+        if enabled && filter::blocked(&reply.text).is_some() {
+            state.filter_holds.fetch_add(1, Ordering::Relaxed);
+            filter::held_text().to_string()
+        } else {
+            reply.text.clone()
+        }
+    };
     let message = StoredMessage {
         id: inbox::content_id(source, reply),
         role: "assistant".into(),
-        text: reply.text.clone(),
+        text,
         ts: reply.ts.clone().unwrap_or_else(model::now_iso),
         read: focused,
         in_reply_to: reply.in_reply_to.clone(),
