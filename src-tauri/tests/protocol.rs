@@ -45,7 +45,7 @@ fn seed_list_matches_the_office() {
     assert_eq!(bots[0].connector, "relay-webhook");
     assert!(bots
         .iter()
-        .any(|bot| bot.id == "local-atlas" && bot.connector == "local-ollama"));
+        .any(|bot| bot.id == "local-atlas" && bot.connector == "local-window"));
     assert!(bots
         .iter()
         .any(|bot| bot.id == "devon" && bot.connector == "relay-webhook"));
@@ -131,6 +131,87 @@ fn whiteboard_preserves_unknown_fields_and_merges_today() {
     let err = todos::toggle(&todo, &today, "t2").unwrap_err();
     assert!(err.contains("Nothing was written"), "{err}");
     assert_eq!(std::fs::read_to_string(&todo).unwrap(), broken);
+}
+
+#[test]
+fn today_cache_shows_metrics_priority_and_updated_without_repeating_focus() {
+    let dir = tempfile::tempdir().unwrap();
+    let todo = dir.path().join("todo.json");
+    let today = dir.path().join("today.json");
+    std::fs::write(
+        &today,
+        r#"{
+          "date": "2026-11-13",
+          "focus": "Cash: $1.00 · Calls",
+          "updated": "Thu Nov 12 2026, 6:34 AM PT",
+          "extra": "kept",
+          "metrics": [
+            {"label": "Cash", "value": "$1.00", "bad": true, "note": "ignore me"},
+            {"label": "Calls", "value": "2", "bad": false}
+          ],
+          "tasks": [
+            {"id": "later", "title": "File the quiet hour", "completed": false, "today": false, "from": "atla-today"},
+            {"id": "today-1", "title": "Call Northwest Registered Agent", "completed": false, "today": true, "from": "atla-today"}
+          ]
+        }"#,
+    )
+    .unwrap();
+    let view = todos::view(&todo, &today).unwrap();
+    assert!(view.focus.is_none());
+    assert_eq!(view.updated.as_deref(), Some("Thu Nov 12 2026, 6:34 AM PT"));
+    assert_eq!(view.metrics.len(), 2);
+    assert!(view.metrics[0].bad);
+    assert_eq!(view.metrics[0].value, "$1.00");
+    assert!(!view.metrics[1].bad);
+    assert_eq!(view.todos[0].id, "today-1");
+    assert!(view.todos[0].today);
+    assert!(!view.todos[1].today);
+    assert!(view.todos.iter().all(|item| item.text != "Cash"));
+}
+
+#[test]
+fn local_window_writes_the_prompt_and_names_the_launch() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = atla_office::connectors::local_window::write_prompt(
+        dir.path(),
+        "m-user",
+        "Wake the window",
+    )
+    .unwrap();
+    assert_eq!(path.file_name().unwrap(), "layer-m-user.md");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "Wake the window\n");
+    assert!(dir.path().read_dir().unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp")
+    }));
+    let home = dir.path().join("home");
+    let commands = atla_office::connectors::local_window::launch_commands("", &home);
+    assert_eq!(
+        commands[0],
+        vec!["gtk-launch".to_string(), "atlas-window".to_string()]
+    );
+    assert!(commands[1][0].ends_with("bin/atlas-window"));
+    let custom =
+        atla_office::connectors::local_window::launch_commands("~/bin/atlas-window --stay", &home);
+    assert_eq!(
+        custom,
+        vec![vec!["~/bin/atlas-window".to_string(), "--stay".to_string()]]
+    );
+    let mut started = Vec::new();
+    let woke = atla_office::connectors::local_window::wake_with(&commands, false, |argv| {
+        started.push(argv.to_vec());
+        Err("gtk-launch missing".into())
+    });
+    assert!(woke.is_err());
+    assert_eq!(started.len(), 2);
+    let skipped = atla_office::connectors::local_window::wake_with(&commands, true, |_| {
+        panic!("a running window must not be launched");
+    })
+    .unwrap();
+    assert!(!skipped);
 }
 
 #[test]
@@ -236,10 +317,10 @@ fn auth_header_and_scrub_keep_secrets_out_of_errors() {
         "Bearer desk-token"
     );
     let body = relay_body("products", "hi", "m-1");
-    assert_eq!(
-        body,
-        json!({"bot": "products", "text": "hi", "reply_to_id": "m-1"})
-    );
+    assert_eq!(body["desk"], "products");
+    assert_eq!(body["id"], "m-1");
+    assert_eq!(body["text"], "hi");
+    assert_eq!(body["reply_to_id"], "m-1");
     let secret = "cursor_test_key_9f3a";
     let cleaned = scrub(secret, &format!("Cursor returned 500. nope {secret}"));
     assert!(!cleaned.contains(secret));
@@ -278,10 +359,11 @@ async fn relay_posts_the_protocol_body() {
     assert!(matches!(outcome, DispatchOutcome::Accepted));
     let requests = server.received_requests().await.unwrap();
     let body: Value = requests[0].body_json().unwrap();
-    assert_eq!(
-        body,
-        json!({"bot": "products", "text": "Sketch the shelf", "reply_to_id": "m-user"})
-    );
+    assert_eq!(body["bot"], "products");
+    assert_eq!(body["desk"], "products");
+    assert_eq!(body["id"], "m-user");
+    assert_eq!(body["text"], "Sketch the shelf");
+    assert_eq!(body["reply_to_id"], "m-user");
     let header = requests[0]
         .headers
         .get("authorization")
