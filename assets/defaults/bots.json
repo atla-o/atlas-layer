@@ -7,7 +7,10 @@
       "connector": "relay-webhook",
       "accent": "#c45c3e",
       "hair": "#241c17",
-      "accessory": "star"
+      "accessory": "star",
+      "links": {
+        "papers": "https://github.com/atla-o/atlas-layer"
+      }
     },
     {
       "id": "products",
@@ -16,7 +19,10 @@
       "connector": "relay-webhook",
       "accent": "#d08a3a",
       "hair": "#5c3a28",
-      "accessory": "none"
+      "accessory": "none",
+      "links": {
+        "drive": "https://github.com/atla-o/atlas-layer"
+      }
     },
     {
       "id": "consumed",
@@ -25,7 +31,10 @@
       "connector": "relay-webhook",
       "accent": "#8d5a3a",
       "hair": "#3a2a22",
-      "accessory": "cup"
+      "accessory": "cup",
+      "links": {
+        "mug": "https://github.com/atla-o/atlas-layer#readme"
+      }
     },
     {
       "id": "creation",
