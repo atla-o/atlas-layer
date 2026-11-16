@@ -337,6 +337,12 @@ fn scan_host() -> Host {
         "Discord",
         "gtk-launch",
         "flatpak",
+        "xdg-open",
+        "google-chrome",
+        "google-chrome-stable",
+        "google-chrome-unstable",
+        "chromium",
+        "chromium-browser",
     ];
     let binaries: Vec<String> = watch
         .into_iter()
@@ -358,7 +364,7 @@ fn scan_host() -> Host {
     }
 }
 
-fn desktop_dirs() -> Vec<PathBuf> {
+pub(crate) fn desktop_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(home) = std::env::var_os("XDG_DATA_HOME") {
         dirs.push(PathBuf::from(home).join("applications"));
