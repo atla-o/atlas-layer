@@ -1,4 +1,4 @@
-import { loadOffice, onOfficeEvent, watchFocus, watchOffice } from "./bridge";
+import { loadOffice, onOfficeEvent, openComms, watchFocus, watchOffice } from "./bridge";
 import { OfficeScene } from "./office/scene";
 import type { OfficeEvent, OfficeSnapshot } from "./types";
 import { Board } from "./ui/board";
@@ -12,6 +12,14 @@ const floor = document.querySelector<HTMLElement>("#floor")!;
 
 let snapshot: OfficeSnapshot | null = null;
 
+const board = new Board((next) => applySnapshot(next));
+const chat = new ChatPanel(
+  (id, status) => {
+    snapshot!.statuses[id] = status;
+    scene.setStatus(id, status);
+  },
+  (id, text) => scene.setLine(id, text),
+);
 const scene = new OfficeScene(
   canvas,
   floor,
@@ -22,13 +30,13 @@ const scene = new OfficeScene(
     void chat.open(bot);
   },
   () => board.open(),
+  (point) => chat.place(point),
+  (id) => {
+    void openComms(id).catch((error: unknown) => {
+      showBanner(error instanceof Error ? error.message : "That did not open.", "error");
+    });
+  },
 );
-
-const board = new Board((next) => applySnapshot(next));
-const chat = new ChatPanel((id, status) => {
-  snapshot!.statuses[id] = status;
-  scene.setStatus(id, status);
-});
 const settings = new SettingsPanel((next) => applySnapshot(next));
 
 let officeOn = true;
@@ -40,6 +48,12 @@ function applySnapshot(next: OfficeSnapshot) {
   document.querySelector("#title")!.textContent = "Atlas Layer";
   document.title = "Atlas Layer";
   scene.setBots(next.bots, next.statuses);
+  scene.setComms(next.comms ?? []);
+  if (next.preview) {
+    scene.setLine("atlas", "Three bills, two replies waiting, and one decision about the shelf.");
+    scene.setLine("products", "Shelf sketch is on the desk.");
+    scene.setLine("consumed", "Finished the chapter.");
+  }
   scene.setBoard(next.todos, next.metrics, next.updated, next.todayFocus, homeLine(next));
   board.set(next);
   settings.render(next);
@@ -99,6 +113,14 @@ function onEvent(event: OfficeEvent) {
     board.set(snapshot);
   } else if (event.type === "warning") {
     showBanner(event.message, "error");
+  } else if (event.type === "badge") {
+    scene.setBadge(event.id, event.unread);
+  } else if (event.type === "message") {
+    scene.setLine(event.botId, event.message.text);
+    chat.apply(event);
+  } else if (event.type === "done") {
+    scene.setLine(event.botId, event.text);
+    chat.apply(event);
   } else {
     chat.apply(event);
   }
