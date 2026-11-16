@@ -180,6 +180,10 @@ The mailbox and the desk phone are objects in the room. There is no app list. Cl
 
 Along the front of the room, a spot appears only when something there is installed. The CAD bench lists FreeCAD, KiCad, LibreCAD, and Blender, and under each one the newest files of that kind in the home directory (`.FCStd`, `.kicad_pro`, `.dxf`, `.blend`). The easel lists GIMP, Inkscape, Krita, Kdenlive, and darktable. The arcade lists RetroArch and the installed games (OpenTTD, 0 A.D., SuperTuxKart, Mindustry, Shattered Pixel Dungeon, Wesnoth, Luanti, Endless Sky, Xonotic). The TV lists Stremio, Steam, Heroic, and GeForce NOW. Opening one runs its `.desktop` entry with `gtk-launch`, or `flatpak run` when there is no desktop file. A CAD file is handed to that same launch. An app that is not installed is not shown.
 
+The filing cabinet opens Drive, Docs, Sheets, Gmail, and Calendar. A pinned Chromium app for that site is started with `gtk-launch`. Otherwise Layer runs `google-chrome` or `chromium` with `--app=` and the page URL, which is the same kind of window a pinned web app uses. The cabinet is drawn only when one of those browsers is installed.
+
+The shelf is the catch-all. Its search lists every launchable `.desktop` file from the system application directories, `~/.local/share/applications`, and the Flatpak export directories, skipping hidden and `NoDisplay` entries. Typing at least two characters also finds files by name under the home directory. An app opens with `gtk-launch`, or with `xdg-open` on its desktop file when `gtk-launch` is missing. A file opens with `xdg-open`. Paths outside the home directory are refused.
+
 Messages are appended to `history/<id>.jsonl` as one JSON object per line:
 
 ```json
