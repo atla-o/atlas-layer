@@ -90,6 +90,29 @@ export type CommObject = {
   mode: "window" | "local" | string;
 };
 
+export type StationSpot = {
+  id: string;
+  label: string;
+};
+
+export type StationApp = {
+  id: string;
+  label: string;
+};
+
+export type RecentFile = {
+  app: string;
+  name: string;
+  path: string;
+};
+
+export type StationDetail = {
+  id: string;
+  label: string;
+  apps: StationApp[];
+  files: RecentFile[];
+};
+
 export type OfficeSnapshot = {
   title: string;
   bots: Bot[];
@@ -111,6 +134,7 @@ export type OfficeSnapshot = {
     sharedCompute: ServiceReport;
   };
   comms: CommObject[];
+  stations: StationSpot[];
 };
 
 export type RemoteAgent = {

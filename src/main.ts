@@ -1,9 +1,10 @@
 import { loadOffice, onOfficeEvent, openComms, watchFocus, watchOffice } from "./bridge";
 import { OfficeScene } from "./office/scene";
-import type { OfficeEvent, OfficeSnapshot } from "./types";
+import type { CommObject, OfficeEvent, OfficeSnapshot } from "./types";
 import { Board } from "./ui/board";
 import { ChatPanel } from "./ui/chat";
 import { SettingsPanel } from "./ui/settings";
+import { StationPanel } from "./ui/station";
 
 const banner = document.querySelector<HTMLElement>("#banner")!;
 const note = document.querySelector<HTMLElement>("#floor-note")!;
@@ -32,11 +33,16 @@ const scene = new OfficeScene(
   () => board.open(),
   (point) => chat.place(point),
   (id) => {
+    if (id === "cad" || id === "easel" || id === "arcade" || id === "tv") {
+      void stations.open(id);
+      return;
+    }
     void openComms(id).catch((error: unknown) => {
       showBanner(error instanceof Error ? error.message : "That did not open.", "error");
     });
   },
 );
+const stations = new StationPanel();
 const settings = new SettingsPanel((next) => applySnapshot(next));
 
 let officeOn = true;
@@ -48,7 +54,7 @@ function applySnapshot(next: OfficeSnapshot) {
   document.querySelector("#title")!.textContent = "Atlas Layer";
   document.title = "Atlas Layer";
   scene.setBots(next.bots, next.statuses);
-  scene.setComms(next.comms ?? []);
+  scene.setComms(objectsOnTheFloor(next));
   if (next.preview) {
     scene.setLine("atlas", "Three bills, two replies waiting, and one decision about the shelf.");
     scene.setLine("products", "Shelf sketch is on the desk.");
@@ -63,12 +69,29 @@ function applySnapshot(next: OfficeSnapshot) {
     scene.select(null);
     if (wasOn && chat.openId) void chat.close();
     document.querySelector<HTMLDialogElement>("#board-dialog")!.close();
+    document.querySelector<HTMLDialogElement>("#station-dialog")!.close();
   } else if (!document.hidden) {
     scene.setRunning(true);
   }
   if (next.preview) showBanner("Browser preview. The installed app is the one that reaches Ollama, the relay, and Cursor.", "preview");
   else if (next.warnings.length) showBanner(next.warnings[0], "error");
   else hideBanner();
+}
+
+const PLATE: Record<string, string> = {
+  cad: "CAD",
+  easel: "Easel",
+  arcade: "Arcade",
+  tv: "TV",
+};
+
+function objectsOnTheFloor(next: OfficeSnapshot): CommObject[] {
+  const spots = (next.stations ?? []).map((station) => ({
+    id: station.id,
+    label: PLATE[station.id] ?? station.label,
+    mode: "local",
+  }));
+  return [...(next.comms ?? []), ...spots];
 }
 
 function homeLine(snapshot: OfficeSnapshot): string {
@@ -139,6 +162,11 @@ window.setInterval(tickClock, 30_000);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   const dialog = document.querySelector<HTMLDialogElement>("#board-dialog")!;
+  const stationDialog = document.querySelector<HTMLDialogElement>("#station-dialog")!;
+  if (stationDialog.open) {
+    stationDialog.close();
+    return;
+  }
   if (dialog.open) {
     dialog.close();
     return;

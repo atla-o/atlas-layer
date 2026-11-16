@@ -37,7 +37,7 @@
           </div>
         </section>
         <div id="floor">
-          <canvas id="office" width="480" height="276" aria-label="The office. Choose a bot, the whiteboard, the mailbox, or the phone."></canvas>
+          <canvas id="office" width="480" height="328" aria-label="The office. Choose a bot, the whiteboard, the mailbox, the phone, or a work bench."></canvas>
           <p id="floor-note" class="floor-note">Opening the office…</p>
           <section id="chat" class="speech" hidden aria-labelledby="chat-name">
           <header class="chat-head">
@@ -145,6 +145,20 @@
         </div>
         <p id="board-updated" class="path" hidden></p>
         <p id="todo-path" class="path"></p>
+      </form>
+    </dialog>
+    <dialog id="station-dialog" aria-labelledby="station-title">
+      <form method="dialog">
+        <header class="board-head">
+          <div>
+            <p class="kicker">Installed</p>
+            <h2 id="station-title">Bench</h2>
+          </div>
+          <button type="button" id="station-close">Close</button>
+        </header>
+        <div id="station-body"></div>
+        <p id="station-empty" class="empty" hidden>Nothing installed here.</p>
+        <p id="station-error" class="chat-warning" hidden></p>
       </form>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
