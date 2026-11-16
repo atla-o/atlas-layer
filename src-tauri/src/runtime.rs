@@ -41,12 +41,40 @@ pub struct AppState {
     rename_all_fields = "camelCase"
 )]
 pub enum UiEvent {
-    Token { bot_id: String, message_id: String, token: String },
-    Done { bot_id: String, message_id: String, text: String },
-    Error { bot_id: String, message_id: String, message: String },
-    Accepted { bot_id: String, message_id: String },
-    Status { bot_id: String, status: String },
-    Todos { todos: Vec<TodoDto>, today_focus: Option<String>, metrics: Vec<MetricDto>, updated: Option<String> },
-    Message { bot_id: String, message: StoredMessage },
-    Warning { message: String },
+    Token {
+        bot_id: String,
+        message_id: String,
+        token: String,
+    },
+    Done {
+        bot_id: String,
+        message_id: String,
+        text: String,
+    },
+    Error {
+        bot_id: String,
+        message_id: String,
+        message: String,
+    },
+    Accepted {
+        bot_id: String,
+        message_id: String,
+    },
+    Status {
+        bot_id: String,
+        status: String,
+    },
+    Todos {
+        todos: Vec<TodoDto>,
+        today_focus: Option<String>,
+        metrics: Vec<MetricDto>,
+        updated: Option<String>,
+    },
+    Message {
+        bot_id: String,
+        message: StoredMessage,
+    },
+    Warning {
+        message: String,
+    },
 }
