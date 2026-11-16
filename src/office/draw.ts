@@ -1,4 +1,5 @@
 import type { BoardMetric, Bot, Todo } from "../types";
+import type { Dir } from "./walk";
 import { drawText, fitText, textWidth } from "./font";
 
 export const WORLD_W = 480;
@@ -30,6 +31,19 @@ export type Seat = {
 };
 
 export const BOARD = { x: 168, y: 12, w: 236, h: 52 };
+
+export type CommRect = { x: number; y: number; w: number; h: number };
+
+const COMM_SPOTS: Record<string, CommRect> = {
+  mail: { x: 4, y: 188, w: 42, h: 34 },
+  voice: { x: 434, y: 188, w: 42, h: 34 },
+  signal: { x: 72, y: 248, w: 52, h: 24 },
+  discord: { x: 132, y: 248, w: 56, h: 24 },
+};
+
+export function commRect(id: string): CommRect | null {
+  return COMM_SPOTS[id] ?? null;
+}
 
 export function layout(count: number): Seat[] {
   const deskW = 72;
@@ -74,8 +88,26 @@ function disc(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, 
   }
 }
 
+export type Actor = {
+  bot: Bot;
+  x: number;
+  y: number;
+  dir: Dir;
+  step: number;
+  line: string;
+};
+
+export type CommActor = {
+  id: string;
+  label: string;
+  unread: number | null;
+  selected: boolean;
+};
+
 export type SceneFrame = {
   bots: Bot[];
+  actors: Actor[];
+  comms: CommActor[];
   statuses: Record<string, string>;
   todos: Todo[];
   metrics: BoardMetric[];
@@ -95,10 +127,14 @@ export function paint(ctx: CanvasRenderingContext2D, scene: SceneFrame) {
   scene.bots.forEach((bot, index) => {
     const seat = seats[index];
     if (!seat) return;
-    paintPerson(ctx, seat, bot, scene.frame);
     paintDesk(ctx, seat, bot, scene.statuses[bot.id] ?? "idle", scene.frame, scene.selectedId === bot.id);
   });
+  for (const actor of scene.actors) {
+    paintPersonAt(ctx, actor.x, actor.y, actor.bot, actor.dir, actor.step);
+    if (actor.line && actor.bot.id !== scene.selectedId) paintCloud(ctx, actor.x + 9, actor.y, actor.line);
+  }
   paintDecor(ctx);
+  for (const comm of scene.comms) paintComm(ctx, comm);
 }
 
 function paintRoom(ctx: CanvasRenderingContext2D) {
@@ -147,6 +183,66 @@ function paintDecor(ctx: CanvasRenderingContext2D) {
   px(ctx, 18, 228, 8, 10, SAGE);
   px(ctx, 26, 222, 10, 12, SAGE_DK);
   px(ctx, 30, 230, 8, 8, SAGE);
+}
+
+function paintComm(ctx: CanvasRenderingContext2D, comm: CommActor) {
+  const spot = commRect(comm.id);
+  if (!spot) return;
+  if (comm.selected) {
+    px(ctx, spot.x - 2, spot.y - 2, spot.w + 4, spot.h + 4, PAPER);
+  }
+  if (comm.id === "mail") paintTray(ctx, spot.x + 4, spot.y);
+  else if (comm.id === "voice") paintPhone(ctx, spot.x + 6, spot.y);
+  else if (comm.id === "signal") paintNote(ctx, spot.x + 2, spot.y);
+  else paintSpeaker(ctx, spot.x + 2, spot.y);
+  const plateY = spot.y + spot.h - 11;
+  px(ctx, spot.x, plateY, spot.w, 11, WOOD_DK);
+  px(ctx, spot.x + 1, plateY + 1, spot.w - 2, 9, "#f3eadc");
+  const label = fitText(comm.label, spot.w - 4);
+  drawText(ctx, label, spot.x + Math.round((spot.w - textWidth(label)) / 2), plateY + 3, INK);
+  if (comm.unread && comm.unread > 0) {
+    const text = comm.unread > 9 ? "9+" : String(comm.unread);
+    const width = textWidth(text) + 4;
+    const bx = spot.x + spot.w - width;
+    const by = spot.y - 2;
+    px(ctx, bx, by, width, 7, TERRA);
+    drawText(ctx, text, bx + 2, by + 1, PAPER);
+  }
+}
+
+function paintTray(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x, y + 8, 34, 12, WOOD);
+  px(ctx, x, y + 8, 34, 2, WOOD_LT);
+  px(ctx, x + 2, y + 10, 30, 8, WOOD_DK);
+  px(ctx, x + 4, y + 4, 22, 8, PAPER);
+  px(ctx, x + 8, y + 2, 20, 8, CREAM);
+  px(ctx, x + 12, y, 16, 8, PAPER);
+  px(ctx, x + 14, y + 2, 10, 1, TERRA);
+}
+
+function paintPhone(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x + 2, y + 12, 26, 8, WOOD_DK);
+  px(ctx, x + 4, y + 8, 22, 6, WOOD);
+  px(ctx, x, y + 2, 8, 6, INK);
+  px(ctx, x + 22, y + 2, 8, 6, INK);
+  px(ctx, x + 2, y, 26, 4, INK);
+  px(ctx, x + 12, y + 10, 4, 3, CREAM);
+  px(ctx, x + 8, y + 16, 2, 3, WOOD);
+}
+
+function paintNote(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x + 4, y, 16, 12, PAPER);
+  px(ctx, x + 4, y, 16, 2, CREAM);
+  px(ctx, x + 6, y + 4, 10, 1, WOOD);
+  px(ctx, x + 6, y + 7, 8, 1, WOOD);
+  disc(ctx, x + 16, y + 9, 3, TERRA);
+}
+
+function paintSpeaker(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  disc(ctx, x + 10, y + 6, 6, WOOD_DK);
+  disc(ctx, x + 10, y + 6, 4, INK);
+  disc(ctx, x + 10, y + 6, 2, CREAM);
+  px(ctx, x + 8, y + 12, 4, 3, WOOD);
 }
 
 function paintBoard(ctx: CanvasRenderingContext2D, scene: SceneFrame) {
@@ -224,9 +320,28 @@ function paintTaskDot(ctx: CanvasRenderingContext2D, x: number, y: number, item:
   disc(ctx, x + 2, y + 2, 1, PAPER);
 }
 
-function paintPerson(ctx: CanvasRenderingContext2D, seat: Seat, bot: Bot, frame: number) {
-  const x = seat.x + Math.round((seat.w - 18) / 2);
-  const y = seat.y - 18;
+function paintCloud(ctx: CanvasRenderingContext2D, cx: number, top: number, text: string) {
+  const label = fitText(text, 78);
+  const width = textWidth(label) + 8;
+  const left = Math.round(cx - width / 2);
+  const y = top - 14;
+  px(ctx, left, y, width, 9, PAPER);
+  px(ctx, left, y + 9, width, 1, WOOD);
+  px(ctx, cx - 1, y + 10, 2, 2, PAPER);
+  drawText(ctx, label, left + 3, y + 2, INK);
+}
+
+function paintPersonAt(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  bot: Bot,
+  dir: Dir,
+  step: number,
+) {
+  const frame = step === 0 ? 0 : 1;
+  const shift = step === 1 ? -1 : step === 2 ? 1 : 0;
+  const face = dir === "e" ? 1 : dir === "w" ? -1 : 0;
   const shirt = bot.accent || TERRA;
   const hair = bot.hair || INK;
   px(ctx, x + 3, y + 20, 12, 2, "rgba(36,28,23,0.18)");
@@ -234,19 +349,20 @@ function paintPerson(ctx: CanvasRenderingContext2D, seat: Seat, bot: Bot, frame:
   px(ctx, x + 2, y + 1, 14, 4, hair);
   px(ctx, x + 4, y + 4, 10, 8, SKIN);
   if (frame === 0) {
-    px(ctx, x + 6, y + 7, 2, 2, INK);
-    px(ctx, x + 10, y + 7, 2, 2, INK);
+    px(ctx, x + 6 + face, y + 7, 2, 2, INK);
+    px(ctx, x + 10 + face, y + 7, 2, 2, INK);
   } else {
-    px(ctx, x + 6, y + 8, 2, 1, INK);
-    px(ctx, x + 10, y + 8, 2, 1, INK);
+    px(ctx, x + 6 + face, y + 8, 2, 1, INK);
+    px(ctx, x + 10 + face, y + 8, 2, 1, INK);
   }
   px(ctx, x + 7, y + 10, 4, 1, "#c48b74");
   px(ctx, x + 4, y + 12, 10, 8, shirt);
   px(ctx, x + 2, y + 13, 3, 6, shirt);
   px(ctx, x + 13, y + 13, 3, 6, shirt);
-  const handY = frame === 0 ? 18 : 17;
-  px(ctx, x + 2, handY, 2, 2, SKIN);
-  px(ctx, x + 14, handY, 2, 2, SKIN);
+  const handY = 18 + (dir === "n" || dir === "s" ? shift : 0);
+  const handX = dir === "e" || dir === "w" ? shift : 0;
+  px(ctx, x + 2 + handX, handY, 2, 2, SKIN);
+  px(ctx, x + 14 + handX, handY, 2, 2, SKIN);
   paintAccessory(ctx, x, y, bot.accessory, shirt);
 }
 
