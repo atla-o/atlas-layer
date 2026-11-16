@@ -84,6 +84,12 @@ export type ServiceReport = {
   earned: string;
 };
 
+export type CommObject = {
+  id: string;
+  label: string;
+  mode: "window" | "local" | string;
+};
+
 export type OfficeSnapshot = {
   title: string;
   bots: Bot[];
@@ -104,6 +110,7 @@ export type OfficeSnapshot = {
     filter: ServiceReport;
     sharedCompute: ServiceReport;
   };
+  comms: CommObject[];
 };
 
 export type RemoteAgent = {
@@ -129,4 +136,5 @@ export type OfficeEvent =
   | { type: "todos"; todos: Todo[]; todayFocus: string | null; metrics: BoardMetric[]; updated: string | null }
   | { type: "home"; bills: Bill[]; replies: WaitingReply[]; decisions: Decision[]; updated: string | null }
   | { type: "message"; botId: string; message: ChatMessage }
-  | { type: "warning"; message: string };
+  | { type: "warning"; message: string }
+  | { type: "badge"; id: string; unread: number };
