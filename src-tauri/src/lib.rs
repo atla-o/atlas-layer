@@ -2,6 +2,7 @@
 
 mod runtime;
 
+pub mod comms;
 pub mod compute;
 pub mod config;
 pub mod connectors;
