@@ -10,6 +10,7 @@
   "paths": {
     "todo": "~/Atla/AI/todo.json",
     "today": "~/Atla/AI/atla-today.json",
+    "dashboard": "~/Atla/AI/dashboard.json",
     "personality": "~/Atla/AI/personality.md",
     "inboxDir": "~/Atla/AI/office-inbox",
     "inboxFile": "",
