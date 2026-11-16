@@ -110,14 +110,14 @@ pub fn plan(host: &Host, id: &str) -> Result<OpenPlan, String> {
             } else {
                 Ok(OpenPlan::Web {
                     window: "mail".into(),
-                    title: "Atlas Layer — Mail".into(),
+                    title: "Atlas Layer \u2014 Mail".into(),
                     url: MAIL_URL.into(),
                 })
             }
         }
         "voice" => Ok(OpenPlan::Web {
             window: "voice".into(),
-            title: "Atlas Layer — Phone".into(),
+            title: "Atlas Layer \u2014 Phone".into(),
             url: VOICE_URL.into(),
         }),
         "signal" => native(host, &SIGNAL)
@@ -310,6 +310,10 @@ pub fn current_objects() -> Vec<CommDto> {
     objects(&cached_host())
 }
 
+pub fn current_host() -> Host {
+    cached_host()
+}
+
 fn scan_host() -> Host {
     let mut desktop_files = Vec::new();
     for dir in desktop_dirs() {
@@ -339,18 +343,9 @@ fn scan_host() -> Host {
         .filter(|name| on_path(name))
         .map(str::to_string)
         .collect();
-    let flatpak_ids = [
-        "org.mozilla.Thunderbird",
-        "org.signal.Signal",
-        "com.discordapp.Discord",
-    ];
     let has_flatpak = binaries.iter().any(|bin| bin == "flatpak");
     let flatpaks = if has_flatpak {
-        flatpak_ids
-            .into_iter()
-            .filter(|id| flatpak_installed(id))
-            .map(str::to_string)
-            .collect()
+        installed_flatpaks()
     } else {
         Vec::new()
     };
@@ -391,15 +386,23 @@ fn on_path(name: &str) -> bool {
     std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
 }
 
-fn flatpak_installed(id: &str) -> bool {
-    Command::new("flatpak")
-        .args(["info", id])
+fn installed_flatpaks() -> Vec<String> {
+    let Ok(output) = Command::new("flatpak")
+        .args(["list", "--app", "--columns=application"])
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.contains(' '))
+        .map(str::to_string)
+        .collect()
 }
 
 #[cfg(test)]
