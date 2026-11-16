@@ -256,7 +256,7 @@ pub struct StationDetail {
 }
 
 pub fn stations(host: &Host) -> Vec<StationDto> {
-    STATIONS
+    let mut found: Vec<StationDto> = STATIONS
         .iter()
         .filter_map(|(id, label)| {
             let any = TOOLS
@@ -271,10 +271,49 @@ pub fn stations(host: &Host) -> Vec<StationDto> {
                 None
             }
         })
-        .collect()
+        .collect();
+    if crate::finder::cabinet_ready(host) {
+        found.push(StationDto {
+            id: "files".into(),
+            label: "Filing cabinet".into(),
+        });
+    }
+    if crate::finder::shelf_ready(host) {
+        found.push(StationDto {
+            id: "shelf".into(),
+            label: "Shelf".into(),
+        });
+    }
+    found
 }
 
 pub fn detail(host: &Host, id: &str, home: &Path) -> Result<StationDetail, String> {
+    if id == "files" {
+        let apps = crate::finder::cabinet_apps(host)
+            .into_iter()
+            .map(|(id, label)| AppDto { id, label })
+            .collect::<Vec<_>>();
+        if apps.is_empty() {
+            return Err("Chromium is not installed, so the cabinet has nothing to open.".into());
+        }
+        return Ok(StationDetail {
+            id: id.into(),
+            label: "Filing cabinet".into(),
+            apps,
+            files: Vec::new(),
+        });
+    }
+    if id == "shelf" {
+        if !crate::finder::shelf_ready(host) {
+            return Err("gtk-launch and xdg-open are both missing.".into());
+        }
+        return Ok(StationDetail {
+            id: id.into(),
+            label: "Shelf".into(),
+            apps: Vec::new(),
+            files: Vec::new(),
+        });
+    }
     let label = STATIONS
         .iter()
         .find(|(station, _)| *station == id)
@@ -305,6 +344,9 @@ pub fn detail(host: &Host, id: &str, home: &Path) -> Result<StationDetail, Strin
 }
 
 pub fn launch(host: &Host, app_id: &str, file: Option<&str>, home: &Path) -> Result<(), String> {
+    if crate::finder::is_web(app_id) {
+        return crate::finder::launch_web(host, app_id);
+    }
     let tool = TOOLS
         .iter()
         .find(|tool| tool.id == app_id)
@@ -504,14 +546,21 @@ mod tests {
 
     #[test]
     fn a_spot_appears_only_when_an_app_can_launch() {
-        let empty = host(&[], &[]);
-        assert!(stations(&empty).is_empty());
+        let bare = Host {
+            desktop_files: Vec::new(),
+            binaries: Vec::new(),
+            flatpaks: Vec::new(),
+            has_gtk_launch: false,
+            has_flatpak: false,
+        };
+        assert!(stations(&bare).iter().all(|item| item.id != "cad"));
         let machine = host(&["org.blender.Blender", "org.gimp.GIMP"], &[]);
         let found = stations(&machine);
-        assert_eq!(
-            found.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
-            vec!["cad", "easel"]
-        );
+        let ids: Vec<_> = found.iter().map(|item| item.id.as_str()).collect();
+        assert!(ids.contains(&"cad"));
+        assert!(ids.contains(&"easel"));
+        assert!(!ids.contains(&"arcade"));
+        assert!(ids.contains(&"shelf"));
     }
 
     #[test]

@@ -39,10 +39,12 @@ const COMM_SPOTS: Record<string, CommRect> = {
   voice: { x: 434, y: 188, w: 42, h: 34 },
   signal: { x: 72, y: 248, w: 52, h: 24 },
   discord: { x: 132, y: 248, w: 56, h: 24 },
-  cad: { x: 8, y: 286, w: 108, h: 38 },
-  easel: { x: 128, y: 286, w: 88, h: 38 },
-  arcade: { x: 228, y: 286, w: 96, h: 38 },
-  tv: { x: 348, y: 286, w: 120, h: 38 },
+  cad: { x: 4, y: 286, w: 74, h: 38 },
+  easel: { x: 82, y: 286, w: 68, h: 38 },
+  arcade: { x: 154, y: 286, w: 72, h: 38 },
+  tv: { x: 230, y: 286, w: 68, h: 38 },
+  files: { x: 302, y: 286, w: 80, h: 38 },
+  shelf: { x: 386, y: 286, w: 88, h: 38 },
 };
 
 export function commRect(id: string): CommRect | null {
@@ -199,10 +201,12 @@ function paintComm(ctx: CanvasRenderingContext2D, comm: CommActor) {
   else if (comm.id === "voice") paintPhone(ctx, spot.x + 6, spot.y);
   else if (comm.id === "signal") paintNote(ctx, spot.x + 2, spot.y);
   else if (comm.id === "discord") paintSpeaker(ctx, spot.x + 2, spot.y);
-  else if (comm.id === "cad") paintBench(ctx, spot.x + 8, spot.y);
+  else if (comm.id === "cad") paintBench(ctx, spot.x + 1, spot.y);
   else if (comm.id === "easel") paintEasel(ctx, spot.x + 28, spot.y);
   else if (comm.id === "arcade") paintCabinet(ctx, spot.x + 30, spot.y);
-  else if (comm.id === "tv") paintTv(ctx, spot.x + 36, spot.y);
+  else if (comm.id === "tv") paintTv(ctx, spot.x + 12, spot.y);
+  else if (comm.id === "files") paintDrawers(ctx, spot.x + 22, spot.y);
+  else if (comm.id === "shelf") paintShelfStack(ctx, spot.x + 24, spot.y);
   const plateY = spot.y + spot.h - 11;
   px(ctx, spot.x, plateY, spot.w, 11, WOOD_DK);
   px(ctx, spot.x + 1, plateY + 1, spot.w - 2, 9, "#f3eadc");
@@ -275,6 +279,25 @@ function paintCabinet(ctx: CanvasRenderingContext2D, x: number, y: number) {
   px(ctx, x + 6, y + 17, 4, 3, TERRA);
   px(ctx, x + 14, y + 17, 4, 3, SAGE);
   px(ctx, x + 8, y + 22, 12, 2, WOOD);
+}
+
+function paintDrawers(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x, y + 2, 30, 20, WOOD);
+  px(ctx, x, y + 2, 30, 2, WOOD_LT);
+  px(ctx, x, y + 8, 30, 1, WOOD_DK);
+  px(ctx, x, y + 14, 30, 1, WOOD_DK);
+  px(ctx, x + 12, y + 4, 6, 2, CREAM);
+  px(ctx, x + 12, y + 10, 6, 2, CREAM);
+  px(ctx, x + 12, y + 16, 6, 2, CREAM);
+}
+
+function paintShelfStack(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x, y + 8, 40, 3, WOOD_DK);
+  px(ctx, x, y + 18, 40, 3, WOOD);
+  px(ctx, x + 4, y + 2, 6, 6, TERRA);
+  px(ctx, x + 12, y + 3, 5, 5, SAGE);
+  px(ctx, x + 20, y + 1, 7, 7, PAPER);
+  px(ctx, x + 30, y + 11, 6, 7, INK);
 }
 
 function paintTv(ctx: CanvasRenderingContext2D, x: number, y: number) {
