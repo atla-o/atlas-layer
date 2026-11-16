@@ -1,6 +1,6 @@
 import type { BoardMetric, Bot, Todo } from "../types";
-import type { CommObject } from "../types";
-import { BOARD, commRect, layout, paint, seatHit, WORLD_H, WORLD_W, type Actor, type SceneFrame } from "./draw";
+import type { CommObject, RoomThing } from "../types";
+import { BOARD, commRect, layout, layoutThings, paint, seatHit, WORLD_H, WORLD_W, type Actor, type PlacedThing, type SceneFrame } from "./draw";
 import { blockedTiles, createWalker, homeTile, snap, stepWalker, tileKey, wanderSpots, TILE, type Point, type Walker } from "./walk";
 
 export class OfficeScene {
@@ -22,6 +22,7 @@ export class OfficeScene {
   private comms: CommObject[] = [];
   private badges = new Map<string, number>();
   private selectedComm: string | null = null;
+  private things: PlacedThing[] = [];
   private reduceMotion: boolean;
 
   constructor(
@@ -31,6 +32,7 @@ export class OfficeScene {
     private readonly onBoard: () => void,
     private readonly onAnchor: (point: { x: number; y: number } | null) => void,
     private readonly onComm: (id: string) => void,
+    private readonly onThing: (thing: RoomThing) => void,
   ) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
@@ -58,6 +60,11 @@ export class OfficeScene {
 
   setLine(id: string, text: string) {
     this.lines.set(id, text);
+    this.draw();
+  }
+
+  setThings(things: RoomThing[]) {
+    this.things = layoutThings(things);
     this.draw();
   }
 
@@ -113,6 +120,7 @@ export class OfficeScene {
       focus: this.focus,
       homeLine: this.homeLine,
       selectedId: this.selectedId,
+      things: this.things,
       actors: this.actors(),
       comms: this.comms.map((item) => ({
         id: item.id,
@@ -137,6 +145,22 @@ export class OfficeScene {
         line: this.lines.get(bot.id) ?? "",
       }];
     });
+  }
+
+  screenBox(id: string): { left: number; top: number; width: number; height: number } | null {
+    const spot = commRect(id);
+    if (!spot) return null;
+    const canvasBox = this.canvas.getBoundingClientRect();
+    const floor = this.host.getBoundingClientRect();
+    if (canvasBox.width === 0) return null;
+    const scaleX = canvasBox.width / WORLD_W;
+    const scaleY = canvasBox.height / WORLD_H;
+    return {
+      left: canvasBox.left - floor.left + spot.x * scaleX,
+      top: canvasBox.top - floor.top + (spot.y + 8) * scaleY,
+      width: spot.w * scaleX,
+      height: Math.max(18, (spot.h - 16) * scaleY),
+    };
   }
 
   anchor(id: string | null): { x: number; y: number } | null {
@@ -216,7 +240,12 @@ export class OfficeScene {
     };
   }
 
-  private hit(x: number, y: number): "board" | { comm: string } | string | null {
+  private hit(x: number, y: number): "board" | { comm: string } | { thing: PlacedThing } | string | null {
+    for (const thing of this.things) {
+      if (x >= thing.x && x <= thing.x + thing.w && y >= thing.y && y <= thing.y + thing.h + 6) {
+        return { thing };
+      }
+    }
     if (x >= BOARD.x && x <= BOARD.x + BOARD.w && y >= BOARD.y && y <= BOARD.y + BOARD.h) {
       return "board";
     }
@@ -248,6 +277,7 @@ export class OfficeScene {
     if (!point) return;
     const target = this.hit(point.x, point.y);
     if (target === "board") this.onBoard();
+    else if (target && typeof target === "object" && "thing" in target) this.onThing(target.thing);
     else if (target && typeof target === "object") {
       this.selectedComm = target.comm;
       this.draw();
@@ -262,6 +292,7 @@ export class OfficeScene {
     const point = this.point(event);
     const target = point ? this.hit(point.x, point.y) : null;
     this.canvas.style.cursor = target ? "pointer" : "default";
+    this.canvas.title = target && typeof target === "object" && "thing" in target ? target.thing.label : "";
   }
 
   private pause() {

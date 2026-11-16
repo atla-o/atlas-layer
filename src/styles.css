@@ -447,6 +447,45 @@ dialog {
 
 dialog::backdrop { background: rgba(36, 28, 23, 0.35); }
 
+#tv-finder {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#tv-query {
+  width: 100%;
+  border: 2px solid var(--ink);
+  background: #10202c;
+  color: var(--paper);
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+#tv-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 88px;
+  overflow: auto;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+}
+
+#tv-results:empty { display: none; }
+
+#tv-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 3px 4px;
+  font-size: 11px;
+}
+
 #station-search {
   width: 100%;
   margin-top: 8px;
