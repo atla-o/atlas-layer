@@ -1,4 +1,4 @@
-import type { BoardMetric, Bot, Todo } from "../types";
+import type { BoardMetric, Bot, RoomThing, Todo } from "../types";
 import type { Dir } from "./walk";
 import { drawText, fitText, textWidth } from "./font";
 
@@ -44,11 +44,48 @@ const COMM_SPOTS: Record<string, CommRect> = {
   arcade: { x: 154, y: 286, w: 72, h: 38 },
   tv: { x: 230, y: 286, w: 68, h: 38 },
   files: { x: 302, y: 286, w: 80, h: 38 },
-  shelf: { x: 386, y: 286, w: 88, h: 38 },
 };
 
 export function commRect(id: string): CommRect | null {
   return COMM_SPOTS[id] ?? null;
+}
+
+export type PlacedThing = RoomThing & CommRect;
+
+const THING_SIZE: Record<string, { w: number; h: number }> = {
+  folder: { w: 18, h: 12 },
+  paper: { w: 16, h: 12 },
+  cartridge: { w: 14, h: 16 },
+  disc: { w: 12, h: 12 },
+};
+
+export function layoutThings(things: RoomThing[]): PlacedThing[] {
+  const groups = new Map<string, RoomThing[]>();
+  for (const thing of things) {
+    const list = groups.get(thing.place) ?? [];
+    list.push(thing);
+    groups.set(thing.place, list);
+  }
+  const placed: PlacedThing[] = [];
+  for (const [place, list] of groups) {
+    const spot = commRect(place);
+    if (!spot) continue;
+    const sample = THING_SIZE[list[0]?.kind ?? "paper"] ?? { w: 14, h: 12 };
+    const cols = Math.max(1, Math.floor((spot.w - 4) / (sample.w + 2)));
+    list.slice(0, cols * 2).forEach((thing, index) => {
+      const size = THING_SIZE[thing.kind] ?? sample;
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      placed.push({
+        ...thing,
+        x: spot.x + 2 + col * (size.w + 2),
+        y: spot.y + 2 + row * (size.h + 1),
+        w: size.w,
+        h: size.h,
+      });
+    });
+  }
+  return placed;
 }
 
 export function layout(count: number): Seat[] {
@@ -121,6 +158,7 @@ export type SceneFrame = {
   focus: string | null;
   homeLine: string;
   selectedId: string | null;
+  things: PlacedThing[];
   frame: number;
 };
 
@@ -141,6 +179,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: SceneFrame) {
   }
   paintDecor(ctx);
   for (const comm of scene.comms) paintComm(ctx, comm);
+  for (const thing of scene.things) paintThing(ctx, thing);
 }
 
 function paintRoom(ctx: CanvasRenderingContext2D) {
@@ -206,7 +245,6 @@ function paintComm(ctx: CanvasRenderingContext2D, comm: CommActor) {
   else if (comm.id === "arcade") paintCabinet(ctx, spot.x + 30, spot.y);
   else if (comm.id === "tv") paintTv(ctx, spot.x + 12, spot.y);
   else if (comm.id === "files") paintDrawers(ctx, spot.x + 22, spot.y);
-  else if (comm.id === "shelf") paintShelfStack(ctx, spot.x + 24, spot.y);
   const plateY = spot.y + spot.h - 11;
   px(ctx, spot.x, plateY, spot.w, 11, WOOD_DK);
   px(ctx, spot.x + 1, plateY + 1, spot.w - 2, 9, "#f3eadc");
@@ -281,6 +319,29 @@ function paintCabinet(ctx: CanvasRenderingContext2D, x: number, y: number) {
   px(ctx, x + 8, y + 22, 12, 2, WOOD);
 }
 
+function paintThing(ctx: CanvasRenderingContext2D, thing: PlacedThing) {
+  if (thing.kind === "folder") {
+    px(ctx, thing.x, thing.y + 3, thing.w, thing.h - 3, "#e2c98a");
+    px(ctx, thing.x, thing.y + 3, thing.w, 2, "#c4a15a");
+    px(ctx, thing.x + 1, thing.y, 8, 4, "#e2c98a");
+  } else if (thing.kind === "cartridge") {
+    px(ctx, thing.x, thing.y, thing.w, thing.h, "#3a342e");
+    px(ctx, thing.x + 1, thing.y + 2, thing.w - 2, 4, TERRA);
+  } else if (thing.kind === "disc") {
+    disc(ctx, thing.x + 6, thing.y + 6, 6, "#d7d2c8");
+    disc(ctx, thing.x + 6, thing.y + 6, 2, INK);
+  } else {
+    px(ctx, thing.x, thing.y, thing.w, thing.h, PAPER);
+    px(ctx, thing.x, thing.y, thing.w, 1, WOOD);
+    px(ctx, thing.x + 2, thing.y + 3, thing.w - 4, 1, "#d9cbb8");
+    px(ctx, thing.x + 2, thing.y + 6, thing.w - 6, 1, "#d9cbb8");
+  }
+  const label = fitText(thing.label, thing.w);
+  if (textWidth(label) <= thing.w) {
+    drawText(ctx, label, thing.x, thing.y + thing.h + 1, INK);
+  }
+}
+
 function paintDrawers(ctx: CanvasRenderingContext2D, x: number, y: number) {
   px(ctx, x, y + 2, 30, 20, WOOD);
   px(ctx, x, y + 2, 30, 2, WOOD_LT);
@@ -289,15 +350,6 @@ function paintDrawers(ctx: CanvasRenderingContext2D, x: number, y: number) {
   px(ctx, x + 12, y + 4, 6, 2, CREAM);
   px(ctx, x + 12, y + 10, 6, 2, CREAM);
   px(ctx, x + 12, y + 16, 6, 2, CREAM);
-}
-
-function paintShelfStack(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  px(ctx, x, y + 8, 40, 3, WOOD_DK);
-  px(ctx, x, y + 18, 40, 3, WOOD);
-  px(ctx, x + 4, y + 2, 6, 6, TERRA);
-  px(ctx, x + 12, y + 3, 5, 5, SAGE);
-  px(ctx, x + 20, y + 1, 7, 7, PAPER);
-  px(ctx, x + 30, y + 11, 6, 7, INK);
 }
 
 function paintTv(ctx: CanvasRenderingContext2D, x: number, y: number) {
