@@ -178,6 +178,8 @@ Bots wander the floor on a 16-pixel grid, between their desk and the front of th
 
 The mailbox and the desk phone are objects in the room. There is no app list. Click the tray and Layer opens a window on `mail.google.com` for `account@atla-o.com` (other accounts already signed in stay in Google's switcher). Click the phone and the same kind of window opens `voice.google.com`. If Thunderbird is installed, the tray opens that instead. Signal and Discord get an object only when they are installed, and the object starts that app. Cookies stay in the webview's own data directory. Layer does not ask for or store a password. A red count is drawn on the tray or the phone only when that page's title includes a number, such as `(3) Inbox - Gmail`.
 
+Along the front of the room, a spot appears only when something there is installed. The CAD bench lists FreeCAD, KiCad, LibreCAD, and Blender, and under each one the newest files of that kind in the home directory (`.FCStd`, `.kicad_pro`, `.dxf`, `.blend`). The easel lists GIMP, Inkscape, Krita, Kdenlive, and darktable. The arcade lists RetroArch and the installed games (OpenTTD, 0 A.D., SuperTuxKart, Mindustry, Shattered Pixel Dungeon, Wesnoth, Luanti, Endless Sky, Xonotic). The TV lists Stremio, Steam, Heroic, and GeForce NOW. Opening one runs its `.desktop` entry with `gtk-launch`, or `flatpak run` when there is no desktop file. A CAD file is handed to that same launch. An app that is not installed is not shown.
+
 Messages are appended to `history/<id>.jsonl` as one JSON object per line:
 
 ```json
