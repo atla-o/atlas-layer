@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::comms::{self, CommDto};
-use crate::stations::{self, StationDto};
+use crate::stations::{self, StationDto, ThingDto};
 use crate::compute::{battery_discharging, LocalCompute, SpareEngine};
 use crate::config::{self, effective_agent, load_office, ollama_base, relay_url, OfficeData};
 use crate::connectors::cursor::{self, CursorConnector, RemoteAgent};
@@ -108,6 +108,8 @@ struct OfficeSnapshot {
     services: ServicesDto,
     comms: Vec<CommDto>,
     stations: Vec<StationDto>,
+    things: Vec<ThingDto>,
+    stremio: bool,
 }
 
 #[derive(Serialize)]
@@ -215,6 +217,8 @@ fn snapshot(data: &mut OfficeData, services: ServicesDto) -> Result<OfficeSnapsh
         services,
         comms: comms::current_objects(),
         stations: stations::stations(&comms::current_host()),
+        things: stations::things(&comms::current_host(), &dirs::home_dir().unwrap_or_default()),
+        stremio: crate::finder::stremio_ready(&comms::current_host()),
     })
 }
 
@@ -228,6 +232,22 @@ fn station_detail(id: String) -> Result<stations::StationDetail, String> {
 fn launch_tool(app_id: String, file: Option<String>) -> Result<(), String> {
     let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
     stations::launch(&comms::current_host(), &app_id, file.as_deref(), &home)
+}
+
+#[tauri::command]
+fn open_thing(app: String, target: String) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    stations::open_thing(&comms::current_host(), &home, &app, &target)
+}
+
+#[tauri::command]
+async fn search_shows(state: State<'_, AppState>, query: String) -> Result<Vec<crate::finder::ShowHit>, String> {
+    crate::finder::search_shows(&state.client, &query).await
+}
+
+#[tauri::command]
+fn play_show(kind: String, id: String) -> Result<(), String> {
+    crate::finder::play_show(&comms::current_host(), &kind, &id)
 }
 
 #[tauri::command]
@@ -1540,6 +1560,9 @@ pub fn run() {
             open_comm,
             station_detail,
             launch_tool,
+            open_thing,
+            search_shows,
+            play_show,
             search_shelf,
             open_shelf,
         ])
