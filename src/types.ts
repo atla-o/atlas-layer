@@ -106,6 +106,13 @@ export type RecentFile = {
   path: string;
 };
 
+export type ShelfHit = {
+  kind: "app" | "file" | string;
+  id: string;
+  label: string;
+  path: string;
+};
+
 export type StationDetail = {
   id: string;
   label: string;

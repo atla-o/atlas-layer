@@ -33,7 +33,7 @@ const scene = new OfficeScene(
   () => board.open(),
   (point) => chat.place(point),
   (id) => {
-    if (id === "cad" || id === "easel" || id === "arcade" || id === "tv") {
+    if (id === "cad" || id === "easel" || id === "arcade" || id === "tv" || id === "files" || id === "shelf") {
       void stations.open(id);
       return;
     }
@@ -83,6 +83,8 @@ const PLATE: Record<string, string> = {
   easel: "Easel",
   arcade: "Arcade",
   tv: "TV",
+  files: "Files",
+  shelf: "Shelf",
 };
 
 function objectsOnTheFloor(next: OfficeSnapshot): CommObject[] {
