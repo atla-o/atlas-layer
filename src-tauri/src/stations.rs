@@ -278,12 +278,6 @@ pub fn stations(host: &Host) -> Vec<StationDto> {
             label: "Filing cabinet".into(),
         });
     }
-    if crate::finder::shelf_ready(host) {
-        found.push(StationDto {
-            id: "shelf".into(),
-            label: "Shelf".into(),
-        });
-    }
     found
 }
 
@@ -341,6 +335,171 @@ pub fn detail(host: &Host, id: &str, home: &Path) -> Result<StationDetail, Strin
         apps,
         files,
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThingDto {
+    pub id: String,
+    pub kind: String,
+    pub place: String,
+    pub label: String,
+    pub app: String,
+    pub target: String,
+}
+
+pub fn things(host: &Host, home: &Path) -> Vec<ThingDto> {
+    let mut found = Vec::new();
+    for (id, label) in crate::finder::cabinet_apps(host) {
+        found.push(ThingDto {
+            id: format!("folder-{id}"),
+            kind: "folder".into(),
+            place: "files".into(),
+            label,
+            app: id,
+            target: String::new(),
+        });
+    }
+    for (app, ext, place) in [
+        ("freecad", "fcstd", "cad"),
+        ("kicad", "kicad_pro", "cad"),
+        ("librecad", "dxf", "cad"),
+        ("blender", "blend", "cad"),
+        ("gimp", "xcf", "easel"),
+        ("krita", "kra", "easel"),
+        ("inkscape", "svg", "easel"),
+        ("kdenlive", "kdenlive", "easel"),
+    ] {
+        if launch_argv(host, tool_by_id(app).expect("known tool")).is_none() {
+            continue;
+        }
+        for path in newest(home, &[ext], 2) {
+            let label = path
+                .file_stem()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string());
+            found.push(ThingDto {
+                id: format!("paper-{}", path.display()),
+                kind: "paper".into(),
+                place: place.into(),
+                label,
+                app: app.into(),
+                target: path.display().to_string(),
+            });
+        }
+    }
+    if host.binaries.iter().any(|bin| bin == "xdg-open") {
+        for path in newest(home, &["pdf", "odt", "ods", "docx", "txt", "md"], 3) {
+            let label = path
+                .file_stem()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string());
+            found.push(ThingDto {
+                id: format!("doc-{}", path.display()),
+                kind: "paper".into(),
+                place: "files".into(),
+                label,
+                app: "xdg".into(),
+                target: path.display().to_string(),
+            });
+        }
+    }
+    for tool in TOOLS.iter().filter(|tool| tool.station == "arcade" && tool.id != "retroarch") {
+        if launch_argv(host, tool).is_none() {
+            continue;
+        }
+        found.push(ThingDto {
+            id: format!("cart-{}", tool.id),
+            kind: "cartridge".into(),
+            place: "arcade".into(),
+            label: tool.label.into(),
+            app: tool.id.into(),
+            target: String::new(),
+        });
+    }
+    for (appid, title) in crate::finder::steam_games(home) {
+        found.push(ThingDto {
+            id: format!("steam-{appid}"),
+            kind: "disc".into(),
+            place: "tv".into(),
+            label: title,
+            app: "steam".into(),
+            target: appid,
+        });
+    }
+    found
+}
+
+fn tool_by_id(id: &str) -> Option<&'static Tool> {
+    TOOLS.iter().find(|tool| tool.id == id)
+}
+
+fn newest(home: &Path, extensions: &[&str], limit: usize) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut budget = 8000u32;
+    walk_ext(home, extensions, &mut found, &mut budget);
+    found.sort_by(|left, right| right.0.cmp(&left.0).then(left.1.cmp(&right.1)));
+    found.into_iter().take(limit).map(|(_, path)| path).collect()
+}
+
+fn walk_ext(dir: &Path, extensions: &[&str], found: &mut Vec<(SystemTime, PathBuf)>, budget: &mut u32) {
+    if *budget == 0 || found.len() >= 40 {
+        return;
+    }
+    let Ok(read) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in read.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') || SKIP.contains(&name.as_ref()) {
+            continue;
+        }
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        if kind.is_dir() {
+            *budget = budget.saturating_sub(1);
+            walk_ext(&path, extensions, found, budget);
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if extensions.iter().any(|want| *want == ext) {
+            let when = entry
+                .metadata()
+                .and_then(|meta| meta.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH);
+            found.push((when, path));
+        }
+    }
+}
+
+pub fn open_thing(host: &Host, home: &Path, app: &str, target: &str) -> Result<(), String> {
+    if crate::finder::is_web(app) {
+        return crate::finder::launch_web(host, app);
+    }
+    if app == "xdg" {
+        return crate::finder::open_hit(host, "file", "", target, home);
+    }
+    if app == "steam" {
+        return crate::finder::play_steam(host, target);
+    }
+    if app == "stremio" {
+        let (kind, id) = target
+            .split_once(':')
+            .ok_or_else(|| "That title is not one Stremio can open.".to_string())?;
+        return crate::finder::play_show(host, kind, id);
+    }
+    let file = if target.is_empty() { None } else { Some(target) };
+    launch(host, app, file, home)
 }
 
 pub fn launch(host: &Host, app_id: &str, file: Option<&str>, home: &Path) -> Result<(), String> {
@@ -560,7 +719,21 @@ mod tests {
         assert!(ids.contains(&"cad"));
         assert!(ids.contains(&"easel"));
         assert!(!ids.contains(&"arcade"));
-        assert!(ids.contains(&"shelf"));
+        assert!(!ids.contains(&"shelf"));
+    }
+
+    #[test]
+    fn a_blend_is_a_paper_and_a_game_is_a_cartridge() {
+        let home = std::env::temp_dir().join(format!("atlas-things-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(home.join("sims")).unwrap();
+        fs::write(home.join("sims").join("cart.blend"), b"BLENDER").unwrap();
+        let machine = host(&["org.blender.Blender", "openttd"], &[]);
+        let found = things(&machine, &home);
+        assert!(found.iter().any(|thing| thing.kind == "paper" && thing.app == "blender" && thing.place == "cad"));
+        assert!(found.iter().any(|thing| thing.kind == "cartridge" && thing.app == "openttd" && thing.place == "arcade"));
+        assert!(found.iter().all(|thing| thing.place != "shelf"));
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]
