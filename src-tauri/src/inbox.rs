@@ -71,7 +71,7 @@ pub fn list_pending(dir: &Path) -> Result<Vec<PendingFile>, String> {
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if name.starts_with('.') || !name.ends_with(".json") {
+        if name.starts_with('.') || !name.ends_with(".json") || is_live_mirror(name) {
             continue;
         }
         let text = fs::read_to_string(&path).map_err(|err| err.to_string())?;
@@ -149,6 +149,132 @@ pub fn content_id(source: &str, reply: &InboxReply) -> String {
     format!("inbox-{:x}", fnv64(raw.as_bytes()))
 }
 
+/// `atlas-*.json` (any `{desk}-*.json`) stays in the inbox. Atlas updates those
+/// files in place. Each file is either one message or `{ "messages": [ ... ] }`.
+pub fn is_live_mirror(name: &str) -> bool {
+    let Some(stem) = name.strip_suffix(".json") else {
+        return false;
+    };
+    match stem.split_once('-') {
+        Some((bot, rest)) => !bot.is_empty() && !rest.is_empty() && !bot.contains('.'),
+        None => false,
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LiveLine {
+    pub bot_key: String,
+    pub message: crate::model::StoredMessage,
+}
+
+pub fn read_live_mirrors(dir: &Path) -> Vec<LiveLine> {
+    if !dir.exists() {
+        return Vec::new();
+    }
+    let mut paths: Vec<PathBuf> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(is_live_mirror)
+        })
+        .collect();
+    paths.sort();
+    let mut lines = Vec::new();
+    for path in paths {
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        let bot = value
+            .get("bot")
+            .and_then(|item| item.as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                name.split_once('-')
+                    .map(|(bot, _)| bot.to_string())
+            });
+        let Some(bot_key) = bot else { continue };
+        if let Some(messages) = value.get("messages").and_then(|item| item.as_array()) {
+            for (index, item) in messages.iter().enumerate() {
+                if let Some(message) = live_message(item, name, index) {
+                    lines.push(LiveLine {
+                        bot_key: bot_key.clone(),
+                        message,
+                    });
+                }
+            }
+        } else if let Some(message) = live_message(&value, name, 0) {
+            lines.push(LiveLine { bot_key, message });
+        }
+    }
+    lines
+}
+
+fn live_message(value: &Value, file: &str, index: usize) -> Option<crate::model::StoredMessage> {
+    let text = value
+        .get("text")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())?;
+    let role = value
+        .get("role")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|role| !role.is_empty())
+        .unwrap_or("assistant");
+    let id = value
+        .get("id")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("mirror-{file}-{index}"));
+    let ts = value
+        .get("ts")
+        .and_then(|item| item.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(crate::model::now_iso);
+    Some(crate::model::StoredMessage {
+        id,
+        role: role.to_string(),
+        text: text.to_string(),
+        ts,
+        read: false,
+        in_reply_to: value
+            .get("in_reply_to")
+            .and_then(|item| item.as_str())
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string),
+        remote_id: None,
+    })
+}
+
+/// One JSON object per line: `{ "role", "text", "id", "ts" }`. The local window's own log.
+pub fn read_window_log(path: &Path) -> Vec<crate::model::StoredMessage> {
+    let Ok(text) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    text.lines()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let value = serde_json::from_str::<Value>(line.trim()).ok()?;
+            live_message(&value, "window", index)
+        })
+        .collect()
+}
+
 fn fnv64(bytes: &[u8]) -> u64 {
     let mut hash = 1469598103934665603u64;
     for byte in bytes {
@@ -177,4 +303,65 @@ pub fn store_offset(history_dir: &Path, inbox_file: &Path, offset: u64) {
     let _ = fs::create_dir_all(history_dir);
     let line = format!("{offset} {}\n", inbox_file.display());
     let _ = fs::write(history_dir.join("inbox-offset.txt"), line);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hyphenated_json_is_a_live_mirror() {
+        assert!(is_live_mirror("atlas-grok.json"));
+        assert!(is_live_mirror("products-1.json"));
+        assert!(!is_live_mirror("one.json"));
+        assert!(!is_live_mirror("atlas.json"));
+        assert!(!is_live_mirror(".atlas-grok.json"));
+        assert!(!is_live_mirror("atlas-grok.md"));
+    }
+
+    #[test]
+    fn live_mirrors_keep_file_order_and_message_order() {
+        let dir = std::env::temp_dir().join(format!("atlas-live-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("atlas-b.json"),
+            r#"{"bot":"Atlas","messages":[{"id":"b1","role":"user","text":"second file"},{"id":"b2","role":"assistant","text":"still second","in_reply_to":"b1"}]}"#, 
+        )
+        .unwrap();
+        fs::write(
+            dir.join("atlas-a.json"),
+            r#"{"text":"first file","id":"a1","role":"user"}"#, 
+        )
+        .unwrap();
+        fs::write(dir.join("one.json"), r#"{"bot":"atlas","text":"archived later"}"#).unwrap();
+        let lines = read_live_mirrors(&dir);
+        let texts: Vec<_> = lines.iter().map(|line| line.message.text.as_str()).collect();
+        assert_eq!(texts, ["first file", "second file", "still second"]);
+        assert_eq!(lines[1].message.id, "b1");
+        assert_eq!(lines[2].message.in_reply_to.as_deref(), Some("b1"));
+        assert!(lines.iter().all(|line| line.bot_key.eq_ignore_ascii_case("atlas")));
+        let pending = list_pending(&dir).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].path.ends_with("one.json"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn window_log_reads_every_line() {
+        let dir = std::env::temp_dir().join(format!("atlas-window-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("local-atlas.jsonl");
+        fs::write(
+            &path,
+            "{\"role\":\"user\",\"text\":\"hello\",\"id\":\"w1\"}\nnot json\n{\"role\":\"assistant\",\"text\":\"hi\",\"id\":\"w2\",\"in_reply_to\":\"w1\"}\n",
+        )
+        .unwrap();
+        let lines = read_window_log(&path);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].text, "hello");
+        assert_eq!(lines[1].in_reply_to.as_deref(), Some("w1"));
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
