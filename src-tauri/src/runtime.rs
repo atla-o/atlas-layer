@@ -1171,11 +1171,11 @@ fn store_live(
 }
 
 fn start_compute(state: AppState) {
-    let path = {
-        let data = state.data.blocking_lock();
-        data.paths.history.join("compute.txt")
-    };
     tauri::async_runtime::spawn(async move {
+        let path = {
+            let data = state.data.lock().await;
+            data.paths.history.join("compute.txt")
+        };
         let mut interval = tokio::time::interval(Duration::from_secs(2));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -1211,7 +1211,18 @@ fn start_live(app: AppHandle, state: AppState) {
             if !office_on {
                 continue;
             }
-            import_live_sources(&app, &state);
+            // import_live_sources uses blocking_lock. That panics on a thread
+            // that is driving the runtime, which is this task. The file walk
+            // itself also belongs on the blocking pool.
+            let app_for_import = app.clone();
+            let state_for_import = state.clone();
+            if let Err(err) = tokio::task::spawn_blocking(move || {
+                import_live_sources(&app_for_import, &state_for_import);
+            })
+            .await
+            {
+                eprintln!("[atlas-layer] live import failed ({err})");
+            }
             let focus = state.data.lock().await.focus.clone();
             if let Some(bot_id) = focus {
                 let is_cursor = state.data.lock().await.bots.iter().any(|bot| {
@@ -1518,6 +1529,32 @@ fn deliver(app: &AppHandle, state: &AppState, reply: &InboxReply, source: &str) 
         },
     );
     emit(app, &UiEvent::Status { bot_id, status });
+}
+
+#[cfg(test)]
+mod runtime_thread {
+    use super::boot;
+
+    #[test]
+    fn the_office_lock_is_taken_off_the_async_runtime() {
+        let state = boot();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async move {
+            let direct = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _guard = state.data.blocking_lock();
+            }));
+            assert!(direct.is_err(), "blocking_lock on the runtime should panic");
+            let state = boot();
+            tokio::task::spawn_blocking(move || {
+                let _ = state.data.blocking_lock().config.features.office;
+            })
+            .await
+            .expect("spawn_blocking");
+        });
+    }
 }
 
 #[cfg(test)]
