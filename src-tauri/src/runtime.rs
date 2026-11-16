@@ -394,3 +394,159 @@ async fn close_bot(state: State<'_, AppState>, bot_id: String) -> Result<(), Str
     }
     Ok(())
 }
+
+#[tauri::command]
+async fn send_message(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    bot_id: String,
+    text: String,
+) -> Result<StoredMessage, String> {
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err("Write a message first.".into());
+    }
+    if text.chars().count() > 8_000 {
+        return Err("That message is too long for the desk.".into());
+    }
+    note_activity(&state).await;
+    if state.data.lock().await.config.features.filter && filter::blocked(&text).is_some() {
+        state.filter_holds.fetch_add(1, Ordering::Relaxed);
+        return Err("The local filter held that message. Nothing was sent.".into());
+    }
+    let bot_id = safe_bot_id(&bot_id).ok_or("Unknown desk")?.to_string();
+    let (bot, history_path) = {
+        let data = state.data.lock().await;
+        if !data.config.features.office {
+            return Err("Office is off. Turn it on in Settings to use the desks.".into());
+        }
+        let bot = data
+            .bots
+            .iter()
+            .find(|bot| bot.id == bot_id)
+            .cloned()
+            .ok_or("Unknown desk")?;
+        if data.inflight.contains(&bot.id) {
+            return Err("This desk is still working on the last message.".into());
+        }
+        let history_path = history::path_for(&data.paths.history, &bot.id)?;
+        (bot, history_path)
+    };
+    let user = StoredMessage {
+        id: model::new_id(),
+        role: "user".into(),
+        text,
+        ts: model::now_iso(),
+        read: true,
+        in_reply_to: None,
+        remote_id: None,
+    };
+    history::append(&history_path, &user)?;
+    {
+        let mut data = state.data.lock().await;
+        data.inflight.insert(bot.id.clone());
+        data.statuses.insert(bot.id.clone(), "working".into());
+    }
+    emit(
+        &app,
+        &UiEvent::Status {
+            bot_id: bot.id.clone(),
+            status: "working".into(),
+        },
+    );
+    let app_task = app.clone();
+    let state_task = state.inner().clone();
+    let user_task = user.clone();
+    let bot_task = bot.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = run_dispatch(&app_task, &state_task, &bot_task, &user_task).await;
+        settle(&app_task, &state_task, &bot_task.id, &user_task.id, result).await;
+        if bot_task.connector == "cursor-agents" {
+            mirror_cursor_desks(&app_task, &state_task, Some(&bot_task.id)).await;
+        }
+    });
+    Ok(user)
+}
+
+#[tauri::command]
+async fn add_todo(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<OfficeSnapshot, String> {
+    let (todo, today) = {
+        let data = state.data.lock().await;
+        (data.paths.todo.clone(), data.paths.today.clone())
+    };
+    let view = todos::add(&todo, &today, &text)?;
+    publish_board(&app, &state, &view).await;
+    note_activity(&state).await;
+    let services = services_of(&state).await;
+    let mut data = state.data.lock().await;
+    snapshot(&mut data, services)
+}
+
+#[tauri::command]
+async fn toggle_todo(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<OfficeSnapshot, String> {
+    let (todo, today) = {
+        let data = state.data.lock().await;
+        (data.paths.todo.clone(), data.paths.today.clone())
+    };
+    let view = todos::toggle(&todo, &today, &id)?;
+    publish_board(&app, &state, &view).await;
+    note_activity(&state).await;
+    let services = services_of(&state).await;
+    let mut data = state.data.lock().await;
+    snapshot(&mut data, services)
+}
+
+#[tauri::command]
+async fn set_feature(
+    state: State<'_, AppState>,
+    feature: String,
+    enabled: bool,
+) -> Result<OfficeSnapshot, String> {
+    let mut data = state.data.lock().await;
+    if !data.config_writable {
+        return Err("config.json could not be read earlier, so it was not changed.".into());
+    }
+    let key = config::feature_key(&feature)?;
+    let mut root = data.config_root.clone();
+    config::set_feature_flag(&mut root, key, enabled, &data.config.features)?;
+    if key != "office" {
+        let mut service = MockService::from_flags(
+            data.config.features.filter,
+            data.config.features.shared_compute,
+        );
+        service.handle(ServiceRequest::SetEnabled {
+            feature: key.into(),
+            enabled,
+        })?;
+    }
+    config::save_config(&data.config_path, &root)?;
+    data.config_root = root;
+    match key {
+        "office" => data.config.features.office = enabled,
+        "filter" => data.config.features.filter = enabled,
+        "sharedCompute" => data.config.features.shared_compute = enabled,
+        _ => {}
+    }
+    let filter_on = data.config.features.filter;
+    let compute_on = data.config.features.shared_compute;
+    drop(data);
+    if key == "sharedCompute" {
+        state.compute.lock().await.set_enabled(enabled);
+    }
+    note_activity(&state).await;
+    let mut services = services_of(&state).await;
+    services.filter = filter_report(filter_on, state.filter_holds.load(Ordering::Relaxed));
+    if !compute_on {
+        services.shared_compute.enabled = false;
+    }
+    let mut data = state.data.lock().await;
+    snapshot(&mut data, services)
+}
