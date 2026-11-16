@@ -14,6 +14,7 @@ import type {
   RemoteAgent,
   ServiceReport,
   StationDetail,
+  ShelfHit,
   Todo,
 } from "./types";
 
@@ -358,6 +359,20 @@ export async function stationDetail(id: string): Promise<StationDetail> {
     throw new Error("Benches, the easel, the arcade, and the TV launch installed apps from Atlas Layer.");
   }
   return invoke<StationDetail>("station_detail", { id });
+}
+
+export async function searchShelf(query: string): Promise<ShelfHit[]> {
+  if (!inTauri()) {
+    throw new Error("The shelf searches installed apps and files from Atlas Layer.");
+  }
+  return invoke<ShelfHit[]>("search_shelf", { query });
+}
+
+export async function openShelf(hit: ShelfHit): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("The shelf opens apps and files from Atlas Layer.");
+  }
+  await invoke("open_shelf", { kind: hit.kind, id: hit.id, path: hit.path });
 }
 
 export async function launchTool(appId: string, file?: string): Promise<void> {

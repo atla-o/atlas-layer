@@ -447,10 +447,25 @@ dialog {
 
 dialog::backdrop { background: rgba(36, 28, 23, 0.35); }
 
+#station-search {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--cream);
+  border: 2px solid var(--ink);
+  padding: 6px 8px;
+}
+
 #station-body {
   max-height: 52vh;
   overflow: auto;
   margin-top: 8px;
+}
+
+#station-body > button {
+  display: block;
+  width: 100%;
+  margin: 0 0 4px;
+  text-align: left;
 }
 
 .station-app { margin: 0 0 12px; }
