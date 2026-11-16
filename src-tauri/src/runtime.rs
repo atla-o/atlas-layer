@@ -231,6 +231,18 @@ fn launch_tool(app_id: String, file: Option<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn search_shelf(query: String) -> Result<Vec<crate::finder::ShelfHit>, String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    Ok(crate::finder::search(&home, &query))
+}
+
+#[tauri::command]
+fn open_shelf(kind: String, id: String, path: String) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    crate::finder::open_hit(&comms::current_host(), &kind, &id, &path, &home)
+}
+
+#[tauri::command]
 async fn open_comm(app: AppHandle, id: String) -> Result<(), String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let handle = app.clone();
@@ -1528,6 +1540,8 @@ pub fn run() {
             open_comm,
             station_detail,
             launch_tool,
+            search_shelf,
+            open_shelf,
         ])
         .run(tauri::generate_context!())
         .expect("atla office failed to start");
