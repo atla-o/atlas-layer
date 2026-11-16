@@ -1,4 +1,5 @@
 import { bindCursorAgent, closeBot, openBot, refreshCursorAgents, sendMessage } from "../bridge";
+import { WORLD_H, WORLD_W } from "../office/draw";
 import type { Bot, ChatMessage, OfficeEvent, RemoteAgent } from "../types";
 
 const root = () => document.querySelector<HTMLElement>("#chat")!;
@@ -9,7 +10,10 @@ export class ChatPanel {
   private agents: RemoteAgent[] = [];
   private sending = false;
 
-  constructor(private readonly onStatus: (id: string, status: string) => void) {
+  constructor(
+    private readonly onStatus: (id: string, status: string) => void,
+    private readonly onLatest: (id: string, text: string) => void,
+  ) {
     document.querySelector<HTMLButtonElement>("#chat-close")!.addEventListener("click", () => {
       void this.close();
     });
@@ -30,6 +34,48 @@ export class ChatPanel {
     document.querySelector<HTMLButtonElement>("#agent-refresh")!.addEventListener("click", () => {
       void this.refresh();
     });
+    root().addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("form, button, select, textarea")) return;
+      const collapsed = !root().classList.contains("open");
+      if (collapsed || target.closest(".chat-head")) {
+        root().classList.toggle("open");
+        this.place(this.anchor);
+      }
+    });
+  }
+
+  private anchor: { x: number; y: number } | null = null;
+
+  place(point: { x: number; y: number } | null) {
+    if (point) this.anchor = point;
+    if (!this.bot || !this.anchor) return;
+    const bubble = root();
+    const canvas = document.querySelector<HTMLCanvasElement>("#office");
+    const floor = document.querySelector<HTMLElement>("#floor");
+    if (!canvas || !floor) return;
+    const canvasBox = canvas.getBoundingClientRect();
+    const floorBox = floor.getBoundingClientRect();
+    if (canvasBox.width === 0) return;
+    const headX = canvasBox.left - floorBox.left + (this.anchor.x * canvasBox.width) / WORLD_W;
+    const headY = canvasBox.top - floorBox.top + (this.anchor.y * canvasBox.height) / WORLD_H;
+    const width = bubble.offsetWidth || 180;
+    const height = bubble.offsetHeight || 48;
+    let left = headX - 28;
+    let top = headY - height - 14;
+    let tail: "down" | "left" = "down";
+    if (top < 4) {
+      tail = "left";
+      top = Math.max(4, headY - 8);
+      left = headX + 16;
+    }
+    left = Math.max(4, Math.min(left, floor.clientWidth - width - 4));
+    top = Math.max(4, Math.min(top, floor.clientHeight - height - 8));
+    bubble.style.left = `${left}px`;
+    bubble.style.top = `${top}px`;
+    bubble.dataset.tail = tail;
+    bubble.style.setProperty("--tail-x", `${Math.max(16, Math.min(headX - left, width - 16))}px`);
   }
 
   async open(bot: Bot) {
@@ -52,7 +98,9 @@ export class ChatPanel {
     } catch (error) {
       this.setWarning(error instanceof Error ? error.message : "The desk did not open.");
     }
-    document.querySelector<HTMLTextAreaElement>("#chat-input")!.focus();
+    root().classList.add("open");
+    this.publishLatest();
+    this.place(this.anchor);
   }
 
   async close() {
@@ -223,6 +271,8 @@ export class ChatPanel {
       log.append(bubble);
     }
     log.scrollTop = log.scrollHeight;
+    this.publishLatest();
+    this.place(this.anchor);
     const last = this.messages[this.messages.length - 1];
     const waits =
       this.bot?.connector === "relay-webhook" || this.bot?.connector === "local-window";
@@ -231,6 +281,14 @@ export class ChatPanel {
 
   private wait(show: boolean) {
     document.querySelector<HTMLElement>("#chat-wait")!.hidden = !show;
+  }
+
+  private publishLatest() {
+    if (!this.bot) return;
+    const last = [...this.messages].reverse().find((message) => message.role !== "system");
+    const node = document.querySelector("#chat-role")!;
+    node.textContent = last ? last.text : this.bot.role;
+    this.onLatest(this.bot.id, last?.text ?? "");
   }
 
   private setWarning(text: string) {

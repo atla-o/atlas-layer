@@ -84,6 +84,58 @@ export type ServiceReport = {
   earned: string;
 };
 
+export type CommObject = {
+  id: string;
+  label: string;
+  mode: "window" | "local" | string;
+};
+
+export type StationSpot = {
+  id: string;
+  label: string;
+};
+
+export type RoomThing = {
+  id: string;
+  kind: "folder" | "paper" | "cartridge" | "disc" | string;
+  place: string;
+  label: string;
+  app: string;
+  target: string;
+};
+
+export type ShowHit = {
+  id: string;
+  kind: string;
+  name: string;
+  year: string;
+};
+
+export type StationApp = {
+  id: string;
+  label: string;
+};
+
+export type RecentFile = {
+  app: string;
+  name: string;
+  path: string;
+};
+
+export type ShelfHit = {
+  kind: "app" | "file" | string;
+  id: string;
+  label: string;
+  path: string;
+};
+
+export type StationDetail = {
+  id: string;
+  label: string;
+  apps: StationApp[];
+  files: RecentFile[];
+};
+
 export type OfficeSnapshot = {
   title: string;
   bots: Bot[];
@@ -104,6 +156,10 @@ export type OfficeSnapshot = {
     filter: ServiceReport;
     sharedCompute: ServiceReport;
   };
+  comms: CommObject[];
+  stations: StationSpot[];
+  things: RoomThing[];
+  stremio: boolean;
 };
 
 export type RemoteAgent = {
@@ -129,4 +185,5 @@ export type OfficeEvent =
   | { type: "todos"; todos: Todo[]; todayFocus: string | null; metrics: BoardMetric[]; updated: string | null }
   | { type: "home"; bills: Bill[]; replies: WaitingReply[]; decisions: Decision[]; updated: string | null }
   | { type: "message"; botId: string; message: ChatMessage }
-  | { type: "warning"; message: string };
+  | { type: "warning"; message: string }
+  | { type: "badge"; id: string; unread: number };

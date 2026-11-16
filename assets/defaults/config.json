@@ -29,7 +29,8 @@
   },
   "localWindow": {
     "inboxDir": "~/Atla/AI/inbox",
-    "launchCommand": ""
+    "launchCommand": "",
+    "historyDir": "~/Atla/AI/window-history"
   },
   "cursor": {
     "baseUrl": "https://api.cursor.com",

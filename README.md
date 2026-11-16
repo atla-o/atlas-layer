@@ -172,7 +172,19 @@ An item is an object with a text field (`text`, `title`, `content`, `task`, `nam
 
 ## Chat
 
-Click a desk. Messages are appended to `history/<id>.jsonl` as one JSON object per line:
+Click a bot. They walk back to their desk, and the speech cloud above their head opens into that desk's full thread: every line, in order, with a composer. The cloud stays on that bot and follows them. A short cloud above the other bots shows their latest line. The right-hand chat column is gone.
+
+Bots wander the floor on a 16-pixel grid, between their desk and the front of the whiteboard. While a desk is working, or while its cloud is open, that bot stands at the desk. The walk pauses when the window is hidden and when the system asks for reduced motion.
+
+The mailbox and the desk phone are objects in the room. There is no app list. Click the tray and Layer opens a window on `mail.google.com` for `account@atla-o.com` (other accounts already signed in stay in Google's switcher). Click the phone and the same kind of window opens `voice.google.com`. If Thunderbird is installed, the tray opens that instead. Signal and Discord get an object only when they are installed, and the object starts that app. Cookies stay in the webview's own data directory. Layer does not ask for or store a password. A red count is drawn on the tray or the phone only when that page's title includes a number, such as `(3) Inbox - Gmail`.
+
+The front of the room holds the work, not a menu. A paper on the CAD bench is a real `.FCStd`, `.kicad_pro`, `.dxf`, or `.blend` file, and clicking it opens that file in FreeCAD, KiCad, LibreCAD, or Blender. Papers on the easel are Krita, GIMP, Inkscape, or Kdenlive files. Other recent documents sit on the filing cabinet and open with `xdg-open`. Folders in the cabinet are Drive, Docs, Sheets, Gmail, and Calendar. A pinned Chromium app is started with `gtk-launch` when one exists; otherwise Chrome or Chromium opens with `--app=` and that page.
+
+Cartridges on the arcade are the installed games (OpenTTD, 0 A.D., SuperTuxKart, Mindustry, Shattered Pixel Dungeon, Wesnoth, Luanti, Endless Sky, Xonotic). Clicking one starts it. Discs on the TV are installed Steam games from the local Steam library, and clicking one runs `steam://rungameid/…`. The TV has one small search. Typing a title asks Stremio's public catalog, and clicking a result opens that movie or show in Stremio. Nothing is drawn for an app or a file that is not there.
+
+Ctrl+K opens a search for every other launchable `.desktop` file and for files under the home directory. It is not an object in the room. An app opens with `gtk-launch`, or with `xdg-open` on its desktop file when `gtk-launch` is missing. A file opens with `xdg-open`. Paths outside the home directory are refused.
+
+Messages are appended to `history/<id>.jsonl` as one JSON object per line:
 
 ```json
 {"id":"m-…","role":"user","text":"…","ts":"2026-11-12T08:00:00Z","read":true}
@@ -190,7 +202,7 @@ Each connector is a Rust `BotConnector` with an adapter behind it (`OllamaConnec
 
 The Local Atlas desk. On send, Layer writes the message text to `config.localWindow.inboxDir` (default `~/Atla/AI/inbox`) as `layer-<message id>.md`, via a `.tmp` file renamed into place. The window only picks up `*.md`. If no process named `atlas-window` is running, Layer starts one and does not wait on it: `gtk-launch atlas-window`, then `~/bin/atlas-window`. Set `config.localWindow.launchCommand` to replace both of those (a program and args separated by spaces).
 
-The window keeps its own chat. It writes the reply into the office inbox as `{"bot":"local-atlas","text":"…","in_reply_to":"<message id>"}`, which Layer already reads into that desk's history.
+The window keeps its own chat. Layer reads that log directly from `config.localWindow.historyDir` (default `~/Atla/AI/window-history`) as `{bot id}.jsonl`, one JSON object per line (`role`, `text`, `id`, `ts`). New lines show up on the desk without anyone pasting them back. A reply the window still drops in the office inbox as `{"bot":"local-atlas","text":"…","in_reply_to":"<message id>"}` is stored too, and a line that arrives both ways is kept once.
 
 `local-ollama` is unchanged. Point a desk at it when you want the model instead of the window.
 
@@ -200,9 +212,27 @@ The window keeps its own chat. It writes the reply into the office inbox as `{"b
 
 If Ollama cannot be reached and `ollama.echoIfUnavailable` is true, or `ATLAS_LAYER_ECHO=1` (or the older `ATLA_OFFICE_ECHO=1`), the desk answers in echo mode and says so. A model that is missing on a server that is up is reported as an error, not echoed.
 
+### Live files for Atlas
+
+Atlas's Grok Bot chat is mirrored as files in `paths.inboxDir` (`~/Atla/AI/office-inbox`). A file named `{desk}-*.json` stays in that folder. Layer watches the directory and reads it again every couple of seconds. Each file is either one message or a transcript:
+
+```json
+{
+  "bot": "atlas",
+  "messages": [
+    {"id": "m-1", "role": "user", "text": "What is on the board?", "ts": "2026-11-16T08:00:00Z"},
+    {"id": "m-2", "role": "assistant", "text": "Three bills, two replies.", "ts": "2026-11-16T08:00:04Z", "in_reply_to": "m-1"}
+  ]
+}
+```
+
+Files are read in name order, then array order. Every entry is appended to that desk's history and shown in the speech cloud. The same id is not stored twice. A file without a hyphen, such as `one.json`, is still a one-shot inbox reply and is moved to `processed/` after it is handled.
+
+Cursor desks are read the same way from the agent conversation API while that desk is open (and on the slower poll for every Cursor desk). The local Atlas window is read from its jsonl log. `relay-webhook` remains the fallback for a bot with no history file and no conversation API: Layer still posts `desk`, `id`, and the full `text`, and inbox replies with `in_reply_to` thread under that message. `local-ollama` and `echo` only exist inside Layer.
+
 ### relay-webhook
 
-Used for Atlas and every other cloud desk. One URL, one auth header. The desk id is the route.
+Used for Atlas and every other cloud desk that has no native transcript. One URL, one auth header. The desk id is the route.
 
 `POST` JSON:
 

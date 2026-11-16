@@ -37,10 +37,14 @@
           </div>
         </section>
         <div id="floor">
-          <canvas id="office" width="480" height="276" aria-label="The office. Choose a desk or the whiteboard."></canvas>
+          <canvas id="office" width="480" height="328" aria-label="The office. Choose a bot, the whiteboard, the mailbox, the phone, or a work bench."></canvas>
           <p id="floor-note" class="floor-note">Opening the office…</p>
-        </div>
-        <section id="chat" class="panel" hidden aria-labelledby="chat-name">
+          <form id="tv-finder" hidden>
+            <label class="sr" for="tv-query">Movies and shows</label>
+            <input id="tv-query" placeholder="Movies and shows" autocomplete="off" />
+            <ul id="tv-results"></ul>
+          </form>
+          <section id="chat" class="speech" hidden aria-labelledby="chat-name">
           <header class="chat-head">
             <span id="chat-swatch" class="swatch" aria-hidden="true"></span>
             <div class="chat-id">
@@ -64,7 +68,8 @@
             <textarea id="chat-input" rows="2" maxlength="8000" placeholder="Write to this desk"></textarea>
             <button type="submit" id="chat-send">Send</button>
           </form>
-        </section>
+          </section>
+        </div>
       </main>
     </div>
     <dialog id="settings-dialog" aria-labelledby="settings-title">
@@ -145,6 +150,22 @@
         </div>
         <p id="board-updated" class="path" hidden></p>
         <p id="todo-path" class="path"></p>
+      </form>
+    </dialog>
+    <dialog id="station-dialog" aria-labelledby="station-title">
+      <form method="dialog">
+        <header class="board-head">
+          <div>
+            <p class="kicker">Installed</p>
+            <h2 id="station-title">Bench</h2>
+          </div>
+          <button type="button" id="station-close">Close</button>
+        </header>
+        <label class="sr" for="station-search">Search apps and files</label>
+        <input id="station-search" hidden placeholder="Search apps and files" autocomplete="off" />
+        <div id="station-body"></div>
+        <p id="station-empty" class="empty" hidden>Nothing installed here.</p>
+        <p id="station-error" class="chat-warning" hidden></p>
       </form>
     </dialog>
     <script type="module" src="/src/main.ts"></script>

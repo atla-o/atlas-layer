@@ -84,6 +84,7 @@ pub struct CursorCfg {
 pub struct LocalWindowCfg {
     pub inbox_dir: String,
     pub launch_command: String,
+    pub history_dir: String,
 }
 
 impl Default for AppConfig {
@@ -158,6 +159,7 @@ impl Default for LocalWindowCfg {
         Self {
             inbox_dir: "~/Atla/AI/inbox".into(),
             launch_command: String::new(),
+            history_dir: "~/Atla/AI/window-history".into(),
         }
     }
 }

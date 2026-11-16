@@ -146,20 +146,61 @@ button, select {
   font-size: 14px;
 }
 
-.panel {
+.speech {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  bottom: 12px;
-  width: min(380px, calc(100% - 24px));
+  z-index: 4;
+  width: min(260px, calc(100% - 12px));
+  max-height: min(220px, 48%);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 8px;
   background: var(--paper);
   border: 3px solid var(--ink);
-  box-shadow: 6px 6px 0 var(--wood-dk);
-  z-index: 2;
+  box-shadow: 3px 3px 0 var(--wood-dk);
+  --tail-x: 28px;
+}
+
+.speech::after {
+  content: "";
+  position: absolute;
+  left: var(--tail-x);
+  bottom: -11px;
+  border-width: 11px 8px 0;
+  border-style: solid;
+  border-color: var(--ink) transparent transparent;
+}
+
+.speech[data-tail="left"]::after {
+  left: -11px;
+  bottom: auto;
+  top: 22px;
+  border-width: 8px 11px 8px 0;
+  border-color: transparent var(--ink) transparent transparent;
+}
+
+.speech .log { max-height: 96px; min-height: 36px; }
+.speech.open {
+  width: min(340px, calc(100% - 16px));
+  max-height: min(460px, 82%);
+}
+.speech.open .log {
+  max-height: none;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+.speech:not(.open) .log,
+.speech:not(.open) .composer,
+.speech:not(.open) #agent-row,
+.speech:not(.open) #chat-meta { display: none; }
+.speech:not(.open) { width: min(180px, 46%); max-height: none; padding: 6px 8px; cursor: pointer; }
+.speech:not(.open) #chat-role {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
 }
 
 .chat-head, .board-head {
@@ -406,6 +447,71 @@ dialog {
 
 dialog::backdrop { background: rgba(36, 28, 23, 0.35); }
 
+#tv-finder {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#tv-query {
+  width: 100%;
+  border: 2px solid var(--ink);
+  background: #10202c;
+  color: var(--paper);
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+#tv-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 88px;
+  overflow: auto;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+}
+
+#tv-results:empty { display: none; }
+
+#tv-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 3px 4px;
+  font-size: 11px;
+}
+
+#station-search {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--cream);
+  border: 2px solid var(--ink);
+  padding: 6px 8px;
+}
+
+#station-body {
+  max-height: 52vh;
+  overflow: auto;
+  margin-top: 8px;
+}
+
+#station-body > button {
+  display: block;
+  width: 100%;
+  margin: 0 0 4px;
+  text-align: left;
+}
+
+.station-app { margin: 0 0 12px; }
+.station-app h3 { margin: 0 0 6px; font-size: 16px; }
+.station-files { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.station-files button, .station-app > button { text-align: left; }
+
 #todo-list {
   list-style: none;
   margin: 12px 0;
@@ -517,5 +623,5 @@ dialog::backdrop { background: rgba(36, 28, 23, 0.35); }
 @media (max-width: 720px) {
   .top { align-items: flex-start; flex-direction: column; }
   .banner { max-width: 100%; }
-  .panel { top: auto; height: min(68%, 520px); }
+  .speech { width: min(220px, calc(100% - 12px)); }
 }

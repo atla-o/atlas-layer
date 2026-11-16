@@ -7,6 +7,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
+use crate::comms::{self, CommDto};
+use crate::stations::{self, StationDto, ThingDto};
 use crate::compute::{battery_discharging, LocalCompute, SpareEngine};
 use crate::config::{self, effective_agent, load_office, ollama_base, relay_url, OfficeData};
 use crate::connectors::cursor::{self, CursorConnector, RemoteAgent};
@@ -104,6 +106,10 @@ struct OfficeSnapshot {
     preview: bool,
     features: config::FeaturesCfg,
     services: ServicesDto,
+    comms: Vec<CommDto>,
+    stations: Vec<StationDto>,
+    things: Vec<ThingDto>,
+    stremio: bool,
 }
 
 #[derive(Serialize)]
@@ -142,8 +148,9 @@ pub fn boot() -> AppState {
 
 pub fn start_background(app: AppHandle, state: AppState) {
     start_watcher(app.clone(), state.clone());
-    start_poll(app, state.clone());
-    start_compute(state);
+    start_poll(app.clone(), state.clone());
+    start_compute(state.clone());
+    start_live(app, state);
 }
 
 fn emit(app: &AppHandle, event: &UiEvent) {
@@ -208,7 +215,62 @@ fn snapshot(data: &mut OfficeData, services: ServicesDto) -> Result<OfficeSnapsh
         preview: false,
         features: data.config.features.clone(),
         services,
+        comms: comms::current_objects(),
+        stations: stations::stations(&comms::current_host()),
+        things: stations::things(&comms::current_host(), &dirs::home_dir().unwrap_or_default()),
+        stremio: crate::finder::stremio_ready(&comms::current_host()),
     })
+}
+
+#[tauri::command]
+fn station_detail(id: String) -> Result<stations::StationDetail, String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    stations::detail(&comms::current_host(), &id, &home)
+}
+
+#[tauri::command]
+fn launch_tool(app_id: String, file: Option<String>) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    stations::launch(&comms::current_host(), &app_id, file.as_deref(), &home)
+}
+
+#[tauri::command]
+fn open_thing(app: String, target: String) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    stations::open_thing(&comms::current_host(), &home, &app, &target)
+}
+
+#[tauri::command]
+async fn search_shows(state: State<'_, AppState>, query: String) -> Result<Vec<crate::finder::ShowHit>, String> {
+    crate::finder::search_shows(&state.client, &query).await
+}
+
+#[tauri::command]
+fn play_show(kind: String, id: String) -> Result<(), String> {
+    crate::finder::play_show(&comms::current_host(), &kind, &id)
+}
+
+#[tauri::command]
+fn search_shelf(query: String) -> Result<Vec<crate::finder::ShelfHit>, String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    Ok(crate::finder::search(&home, &query))
+}
+
+#[tauri::command]
+fn open_shelf(kind: String, id: String, path: String) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or_else(|| "There is no home directory.".to_string())?;
+    crate::finder::open_hit(&comms::current_host(), &kind, &id, &path, &home)
+}
+
+#[tauri::command]
+async fn open_comm(app: AppHandle, id: String) -> Result<(), String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(comms::open(&handle, &id));
+    })
+    .map_err(|err| err.to_string())?;
+    rx.await.map_err(|err| err.to_string())?
 }
 
 async fn note_activity(state: &AppState) {
@@ -1019,6 +1081,95 @@ async fn mirror_cursor_desks(app: &AppHandle, state: &AppState, only_bot: Option
     }
 }
 
+fn import_live_sources(app: &AppHandle, state: &AppState) {
+    let (inbox, history_root, window_history, desks) = {
+        let data = state.data.blocking_lock();
+        let window_history =
+            config::resolve_against(&data.config_dir, &data.config.local_window.history_dir);
+        let desks: Vec<(String, String, std::path::PathBuf)> = data
+            .bots
+            .iter()
+            .filter_map(|bot| {
+                let path = history::path_for(&data.paths.history, &bot.id).ok()?;
+                Some((bot.id.clone(), bot.connector.clone(), path))
+            })
+            .collect();
+        (
+            data.paths.inbox_dir.clone(),
+            data.paths.history.clone(),
+            window_history,
+            desks,
+        )
+    };
+    let _ = history_root;
+    for line in inbox::read_live_mirrors(&inbox) {
+        store_live(app, state, &line.bot_key, line.message);
+    }
+    for (bot_id, connector, _) in &desks {
+        if connector != "local-window" {
+            continue;
+        }
+        let path = window_history.join(format!("{bot_id}.jsonl"));
+        for message in inbox::read_window_log(&path) {
+            store_live(app, state, bot_id, message);
+        }
+    }
+}
+
+fn store_live(
+    app: &AppHandle,
+    state: &AppState,
+    bot_key: &str,
+    mut message: crate::model::StoredMessage,
+) {
+    let (bot_id, history_path, focused) = {
+        let data = state.data.blocking_lock();
+        let Some(bot_id) = data.bots.iter().find_map(|bot| {
+            if bot.id == bot_key || bot.name.eq_ignore_ascii_case(bot_key) {
+                Some(bot.id.clone())
+            } else {
+                None
+            }
+        }) else {
+            return;
+        };
+        let Ok(history_path) = history::path_for(&data.paths.history, &bot_id) else {
+            return;
+        };
+        let focused = data.focus.as_deref() == Some(bot_id.as_str());
+        (bot_id, history_path, focused)
+    };
+    message.read = focused;
+    let stored = match history::append_unique(&history_path, &message) {
+        Ok(stored) => stored,
+        Err(_) => return,
+    };
+    if !stored {
+        return;
+    }
+    emit(
+        app,
+        &UiEvent::Message {
+            bot_id: bot_id.clone(),
+            message,
+        },
+    );
+    if !focused {
+        let mut data = state.data.blocking_lock();
+        if !data.inflight.contains(&bot_id) {
+            data.statuses.insert(bot_id.clone(), "message".into());
+            drop(data);
+            emit(
+                app,
+                &UiEvent::Status {
+                    bot_id,
+                    status: "message".into(),
+                },
+            );
+        }
+    }
+}
+
 fn start_compute(state: AppState) {
     let path = {
         let data = state.data.blocking_lock();
@@ -1048,6 +1199,30 @@ fn battery_statuses() -> Vec<String> {
         }
     }
     found
+}
+
+fn start_live(app: AppHandle, state: AppState) {
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            let office_on = state.data.lock().await.config.features.office;
+            if !office_on {
+                continue;
+            }
+            import_live_sources(&app, &state);
+            let focus = state.data.lock().await.focus.clone();
+            if let Some(bot_id) = focus {
+                let is_cursor = state.data.lock().await.bots.iter().any(|bot| {
+                    bot.id == bot_id && bot.connector == "cursor-agents"
+                });
+                if is_cursor {
+                    mirror_cursor_desks(&app, &state, Some(&bot_id)).await;
+                }
+            }
+        }
+    });
 }
 
 fn start_poll(app: AppHandle, state: AppState) {
@@ -1144,6 +1319,7 @@ fn watch_loop(app: AppHandle, state: AppState) {
                 if office_on {
                     reload_board(&app, &state);
                     ingest(&app, &state);
+                    import_live_sources(&app, &state);
                 }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
@@ -1381,6 +1557,14 @@ pub fn run() {
             refresh_cursor_agents,
             bind_cursor_agent,
             set_feature,
+            open_comm,
+            station_detail,
+            launch_tool,
+            open_thing,
+            search_shows,
+            play_show,
+            search_shelf,
+            open_shelf,
         ])
         .run(tauri::generate_context!())
         .expect("atla office failed to start");

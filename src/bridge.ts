@@ -13,6 +13,9 @@ import type {
   OpenedChat,
   RemoteAgent,
   ServiceReport,
+  StationDetail,
+  ShelfHit,
+  ShowHit,
   Todo,
 } from "./types";
 
@@ -79,7 +82,7 @@ type PreviewState = {
   focus: string | null;
 };
 
-const previewKey = "atla-office-preview-v2";
+const previewKey = "atla-office-preview-v3";
 
 const defaultFeatures = (): FeatureFlags => ({
   office: true,
@@ -163,8 +166,28 @@ function freshPreview(): PreviewState {
         filter: serviceReport("filter", false),
         sharedCompute: serviceReport("sharedCompute", false),
       },
+      comms: [
+        { id: "mail", label: "Mail", mode: "window" },
+        { id: "voice", label: "Phone", mode: "window" },
+      ],
+      stations: [],
+      things: [],
+      stremio: false,
     },
-    history: {},
+    history: {
+      atlas: [
+        { id: "a1", role: "user", text: "What is on the board this morning?", ts: "2026-11-16T08:00:00Z", read: true },
+        { id: "a2", role: "assistant", text: "Three bills, two replies waiting, and one decision about the shelf.", ts: "2026-11-16T08:00:04Z", read: true, inReplyTo: "a1" },
+        { id: "a3", role: "user", text: "Read me the replies, the full text.", ts: "2026-11-16T08:01:00Z", read: true },
+        { id: "a4", role: "assistant", text: "Mara: the glaze samples arrived, both the ash and the celadon. Jonah: the kiln slot on Thursday still holds if we confirm by noon.", ts: "2026-11-16T08:01:06Z", read: true, inReplyTo: "a3" },
+      ],
+      products: [
+        { id: "p1", role: "assistant", text: "Shelf sketch is on the desk.", ts: "2026-11-16T08:02:00Z", read: true },
+      ],
+      consumed: [
+        { id: "c1", role: "assistant", text: "Finished the chapter.", ts: "2026-11-16T07:40:00Z", read: true },
+      ],
+    },
     focus: null,
   };
 }
@@ -189,6 +212,15 @@ function loadPreview(): PreviewState {
     parsed.snapshot.decisions = parsed.snapshot.decisions ?? [];
     parsed.snapshot.dashboardUpdated = parsed.snapshot.dashboardUpdated ?? null;
     parsed.snapshot.paths.dashboard = parsed.snapshot.paths.dashboard ?? "examples/dashboard.json";
+    parsed.snapshot.stations = parsed.snapshot.stations ?? [];
+    parsed.snapshot.things = parsed.snapshot.things ?? [];
+    parsed.snapshot.stremio = parsed.snapshot.stremio ?? false;
+    parsed.snapshot.comms = parsed.snapshot.comms?.length
+      ? parsed.snapshot.comms
+      : [
+          { id: "mail", label: "Mail", mode: "window" },
+          { id: "voice", label: "Phone", mode: "window" },
+        ];
     parsed.snapshot.todos = parsed.snapshot.todos.map((item) => ({ ...item, today: Boolean(item.today) }));
     return parsed;
   } catch {
@@ -327,9 +359,78 @@ export async function bindCursorAgent(botId: string, agentId: string): Promise<B
   return invoke<Bot>("bind_cursor_agent", { botId, agentId });
 }
 
+export async function stationDetail(id: string): Promise<StationDetail> {
+  if (!inTauri()) {
+    throw new Error("Benches, the easel, the arcade, and the TV launch installed apps from Atlas Layer.");
+  }
+  return invoke<StationDetail>("station_detail", { id });
+}
+
+export async function openThing(app: string, target: string): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("That opens from Atlas Layer.");
+  }
+  await invoke("open_thing", { app, target });
+}
+
+export async function searchShows(query: string): Promise<ShowHit[]> {
+  if (!inTauri()) {
+    throw new Error("The TV searches Stremio from Atlas Layer.");
+  }
+  return invoke<ShowHit[]>("search_shows", { query });
+}
+
+export async function playShow(kind: string, id: string): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("Stremio plays from Atlas Layer.");
+  }
+  await invoke("play_show", { kind, id });
+}
+
+export async function searchShelf(query: string): Promise<ShelfHit[]> {
+  if (!inTauri()) {
+    throw new Error("The shelf searches installed apps and files from Atlas Layer.");
+  }
+  return invoke<ShelfHit[]>("search_shelf", { query });
+}
+
+export async function openShelf(hit: ShelfHit): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("The shelf opens apps and files from Atlas Layer.");
+  }
+  await invoke("open_shelf", { kind: hit.kind, id: hit.id, path: hit.path });
+}
+
+export async function launchTool(appId: string, file?: string): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("That app launches from Atlas Layer.");
+  }
+  await invoke("launch_tool", { appId, file: file ?? null });
+}
+
+export async function openComms(id: string): Promise<void> {
+  if (!inTauri()) {
+    const note =
+      id === "mail"
+        ? "Mail opens in Atlas Layer as Gmail for account@atla-o.com. This browser preview cannot keep that sign-in."
+        : id === "voice"
+          ? "The desk phone opens Google Voice inside Atlas Layer. This browser preview cannot keep that sign-in."
+          : "That app opens from its object in Atlas Layer.";
+    throw new Error(note);
+  }
+  await invoke("open_comm", { id });
+}
+
 export async function watchOffice(): Promise<() => void> {
   if (!inTauri()) return () => undefined;
-  return listen<OfficeEvent>("office-event", (event) => emit(event.payload));
+  const unlisten = await listen<OfficeEvent>("office-event", (event) => emit(event.payload));
+  const badges = await listen<{ id: string; unread: number }>("comms-badge", (event) => {
+    emit({ type: "badge", id: event.payload.id, unread: event.payload.unread });
+  });
+  return () => {
+    unlisten();
+    badges();
+  };
 }
 
 export async function watchFocus(onFocus: (focused: boolean) => void): Promise<void> {
