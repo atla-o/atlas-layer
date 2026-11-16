@@ -15,6 +15,7 @@ import type {
   ServiceReport,
   StationDetail,
   ShelfHit,
+  ShowHit,
   Todo,
 } from "./types";
 
@@ -170,6 +171,8 @@ function freshPreview(): PreviewState {
         { id: "voice", label: "Phone", mode: "window" },
       ],
       stations: [],
+      things: [],
+      stremio: false,
     },
     history: {
       atlas: [
@@ -210,6 +213,8 @@ function loadPreview(): PreviewState {
     parsed.snapshot.dashboardUpdated = parsed.snapshot.dashboardUpdated ?? null;
     parsed.snapshot.paths.dashboard = parsed.snapshot.paths.dashboard ?? "examples/dashboard.json";
     parsed.snapshot.stations = parsed.snapshot.stations ?? [];
+    parsed.snapshot.things = parsed.snapshot.things ?? [];
+    parsed.snapshot.stremio = parsed.snapshot.stremio ?? false;
     parsed.snapshot.comms = parsed.snapshot.comms?.length
       ? parsed.snapshot.comms
       : [
@@ -359,6 +364,27 @@ export async function stationDetail(id: string): Promise<StationDetail> {
     throw new Error("Benches, the easel, the arcade, and the TV launch installed apps from Atlas Layer.");
   }
   return invoke<StationDetail>("station_detail", { id });
+}
+
+export async function openThing(app: string, target: string): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("That opens from Atlas Layer.");
+  }
+  await invoke("open_thing", { app, target });
+}
+
+export async function searchShows(query: string): Promise<ShowHit[]> {
+  if (!inTauri()) {
+    throw new Error("The TV searches Stremio from Atlas Layer.");
+  }
+  return invoke<ShowHit[]>("search_shows", { query });
+}
+
+export async function playShow(kind: string, id: string): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("Stremio plays from Atlas Layer.");
+  }
+  await invoke("play_show", { kind, id });
 }
 
 export async function searchShelf(query: string): Promise<ShelfHit[]> {
