@@ -15,6 +15,7 @@ use crate::connectors::local_window::LocalWindowConnector;
 use crate::connectors::ollama::OllamaConnector;
 use crate::connectors::relay::RelayConnector;
 use crate::connectors::{self, Connector, DispatchOutcome, Outbound, TokenTx};
+use crate::dashboard::{self, Bill, Decision, WaitingReply};
 use crate::filter;
 use crate::history;
 use crate::inbox::{self, InboxReply};
@@ -69,6 +70,12 @@ pub enum UiEvent {
         metrics: Vec<MetricDto>,
         updated: Option<String>,
     },
+    Home {
+        bills: Vec<Bill>,
+        replies: Vec<WaitingReply>,
+        decisions: Vec<Decision>,
+        updated: Option<String>,
+    },
     Message {
         bot_id: String,
         message: StoredMessage,
@@ -83,6 +90,7 @@ pub enum UiEvent {
 struct PathDto {
     todo: String,
     today: String,
+    dashboard: String,
     inbox: String,
     history: String,
     config: String,
@@ -98,6 +106,10 @@ struct OfficeSnapshot {
     today_focus: Option<String>,
     metrics: Vec<MetricDto>,
     updated: Option<String>,
+    bills: Vec<Bill>,
+    replies: Vec<WaitingReply>,
+    decisions: Vec<Decision>,
+    dashboard_updated: Option<String>,
     statuses: std::collections::HashMap<String, String>,
     paths: PathDto,
     warnings: Vec<String>,
@@ -188,6 +200,10 @@ fn snapshot(data: &mut OfficeData, services: ServicesDto) -> Result<OfficeSnapsh
         .inbox_file
         .clone()
         .unwrap_or_else(|| data.paths.inbox_dir.clone());
+    let home = dashboard::load(&data.paths.dashboard);
+    if let Some(note) = home.warning.clone() {
+        warnings.push(note);
+    }
     Ok(OfficeSnapshot {
         title: data.config.office.title.clone(),
         bots,
@@ -195,10 +211,15 @@ fn snapshot(data: &mut OfficeData, services: ServicesDto) -> Result<OfficeSnapsh
         today_focus,
         metrics,
         updated,
+        bills: home.bills,
+        replies: home.replies,
+        decisions: home.decisions,
+        dashboard_updated: home.updated,
         statuses: data.statuses.clone(),
         paths: PathDto {
             todo: data.paths.todo.display().to_string(),
             today: data.paths.today.display().to_string(),
+            dashboard: data.paths.dashboard.display().to_string(),
             inbox: inbox.display().to_string(),
             history: data.paths.history.display().to_string(),
             config: data.config_dir.display().to_string(),
@@ -1115,6 +1136,7 @@ fn watch_loop(app: AppHandle, state: AppState) {
             let mut paths = vec![
                 data.paths.todo.clone(),
                 data.paths.today.clone(),
+                data.paths.dashboard.clone(),
                 data.paths.inbox_dir.clone(),
             ];
             if let Some(file) = &data.paths.inbox_file {
@@ -1143,6 +1165,7 @@ fn watch_loop(app: AppHandle, state: AppState) {
                 let office_on = state.data.blocking_lock().config.features.office;
                 if office_on {
                     reload_board(&app, &state);
+                    reload_dashboard(&app, &state);
                     ingest(&app, &state);
                 }
             }
@@ -1180,6 +1203,34 @@ fn reload_board(app: &AppHandle, state: &AppState) {
         }
         Err(err) => note_once(app, state, &err),
     }
+}
+
+fn reload_dashboard(app: &AppHandle, state: &AppState) {
+    let path = {
+        let data = state.data.blocking_lock();
+        data.paths.dashboard.clone()
+    };
+    let home = dashboard::load(&path);
+    let signature = home.signature();
+    {
+        let mut data = state.data.blocking_lock();
+        if data.last_dash_sig == signature {
+            return;
+        }
+        data.last_dash_sig = signature;
+    }
+    if let Some(message) = &home.warning {
+        note_once(app, state, message);
+    }
+    emit(
+        app,
+        &UiEvent::Home {
+            bills: home.bills,
+            replies: home.replies,
+            decisions: home.decisions,
+            updated: home.updated,
+        },
+    );
 }
 
 fn note_once(app: &AppHandle, state: &AppState, message: &str) {
@@ -1357,7 +1408,7 @@ mod event_shape {
         let json = serde_json::to_string(&event).unwrap();
         assert_eq!(
             json,
-            r#"{"type":"status","botId":"atlas","status":"message"}"#
+            r#"{"type":"status","botId":"atlas","status":"message"}"#,
         );
     }
 }
