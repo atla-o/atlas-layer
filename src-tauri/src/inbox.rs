@@ -326,11 +326,11 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(
             dir.join("atlas-b.json"),
-            r#"{"bot":"Atlas","messages":[{"id":"b1","role":"user","text":"second file"},{"id":"b2","role":"assistant","text":"still second","in_reply_to":"b1"}]}"#,\u000a        )
+            r#"{"bot":"Atlas","messages":[{"id":"b1","role":"user","text":"second file"},{"id":"b2","role":"assistant","text":"still second","in_reply_to":"b1"}]}"#,\n        )
         .unwrap();
         fs::write(
             dir.join("atlas-a.json"),
-            r#"{"text":"first file","id":"a1","role":"user"}"#,\u000a        )
+            r#"{"text":"first file","id":"a1","role":"user"}"#,\n        )
         .unwrap();
         fs::write(dir.join("one.json"), r#"{"bot":"atlas","text":"archived later"}"#).unwrap();
         let lines = read_live_mirrors(&dir);
