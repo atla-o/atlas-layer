@@ -13,6 +13,7 @@ pub mod inbox;
 pub mod model;
 pub mod secrets;
 pub mod services;
+pub mod stations;
 pub mod todos;
 
 pub fn run() {
