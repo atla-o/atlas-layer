@@ -84,6 +84,7 @@ pub struct CursorCfg {
 pub struct LocalWindowCfg {
     pub inbox_dir: String,
     pub launch_command: String,
+    pub history_dir: String,
 }
 
 impl Default for AppConfig {
@@ -158,6 +159,7 @@ impl Default for LocalWindowCfg {
         Self {
             inbox_dir: "~/Atla/AI/inbox".into(),
             launch_command: String::new(),
+            history_dir: "~/Atla/AI/window-history".into(),
         }
     }
 }
@@ -476,7 +478,7 @@ mod tests {
         assert_eq!(carried["features"]["sharedCompute"], true);
         assert_eq!(
             fs::read_to_string(fresh.join("bots.json")).unwrap(),
-            r#"{"bots":[]}"#
+            r#"{"bots":[]}" #
         );
 
         fs::write(
