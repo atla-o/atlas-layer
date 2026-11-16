@@ -296,7 +296,7 @@ pub fn load_office(config_dir: &Path) -> OfficeData {
     let last_dash_sig = crate::dashboard::load(&paths.dashboard).signature();
 
     eprintln!(
-        "[atlas-layer] config {} \u{b7} {} desks",
+        "[atlas-layer] config {} · {} desks",
         config_dir.display(),
         bots.len()
     );
