@@ -86,8 +86,8 @@ The switches, under `features`:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `office` | `true` | Shows the room. Off leaves a status window and pauses the desk watchers. |
-| `filter` | `false` | Arms the filter stub. The engine is not installed, so nothing is scanned. |
-| `sharedCompute` | `false` | Arms shared compute. It waits until the machine is idle or plugged in. The stub does not run work. |
+| `filter` | `false` | Checks desk text with a local word list. Off stops scanning. No hosts or DNS change. |
+| `sharedCompute` | `false` | Runs a capped local Roleplay sim tick when idle and plugged in. Off stops it. |
 
 A config written before these keys existed still loads. Missing switches use the defaults above, and saving a switch does not drop unknown fields.
 
@@ -97,6 +97,7 @@ The starter paths are:
 | --- | --- |
 | `paths.todo` | `~/Atla/AI/todo.json` |
 | `paths.today` | `~/Atla/AI/atla-today.json` |
+| `paths.dashboard` | `~/Atla/AI/dashboard.json` |
 | `paths.personality` | `~/Atla/AI/personality.md` |
 | `paths.inboxDir` | `~/Atla/AI/office-inbox` |
 | `paths.inboxFile` | empty. Set this to tail a JSONL file as well as, or instead of, the directory. |
@@ -145,6 +146,17 @@ The sample list is `examples/todo.json`. The demo also merges `examples/today.js
 The seed list is Atlas, Products, Consumed, Creation, Covenant, Wellness, Modified, Devon, Local Atlas, Atlas site, and Roleplay. Colors and accessories are optional. Unknown connector names are skipped and reported.
 
 ## Whiteboard
+
+`paths.dashboard` (`~/Atla/AI/dashboard.json`) is the productivity home Atlas keeps updated. Layer only reads it. Bills (with due dates), replies waiting on you, and decisions you owe show as a short line on the wall board and in full when you click the board. Unknown fields are ignored. A missing file is an empty home. A file that is not JSON is reported and left untouched.
+
+```json
+{
+  "updated": "Mon Nov 16 2026, 4:00 AM PT",
+  "bills": [{ "name": "Registered agent", "amount": "$50.00", "due": "2026-11-20", "paid": false }],
+  "replies": [{ "from": "Atlas", "text": "Need a yes", "since": "2026-11-15" }],
+  "decisions": [{ "title": "Keep the home in Layer", "detail": "The old page is retired", "due": "2026-11-16" }]
+}
+```
 
 The board shows `paths.todo`, then any items from `paths.today` whose id is not already on the todo list. Checking a today-only item copies it into `todo.json` and flips it there. The today file is never written. A task with `today: true` is today's priority: a filled red dot, sorted ahead of the others. Every other task gets a hollow dot.
 
