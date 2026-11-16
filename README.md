@@ -59,3 +59,263 @@ atlas-layer
 `install.sh` builds a release binary with the `custom-protocol` feature, so the window loads the files baked into the binary instead of the Vite dev server at `http://127.0.0.1:47331`. It copies that binary to `~/.local/bin/atlas-layer`, installs a `.desktop` file and icon under `~/.local`, and writes a starter config if you do not already have one.
 
 Or search for “Atlas Layer” in the KDE menu. `~/.local/bin` needs to be on your `PATH` (it is, for a normal Fedora login).
+
+If the window is blank on Asahi, try one of these and restart the app. They work around WebKit compositor bugs and cost more CPU, so leave them unset when the window is fine:
+
+```bash
+WEBKIT_DISABLE_COMPOSITING_MODE=1 atlas-layer
+# or
+WEBKIT_DISABLE_DMABUF_RENDERER=1 atlas-layer
+```
+
+Do not set `GDK_BACKEND=x11` unless Wayland itself is broken. The app is meant to be a native Wayland window.
+
+## First run
+
+Config lives in `$XDG_CONFIG_HOME/atlas-layer` (`~/.config/atlas-layer` unless you moved it):
+
+- `config.json` — paths, connector settings, and the three switches under `features`. No secrets.
+- `bots.json` — the desks. Add or remove objects in `bots`. Restart the app, or it will pick the file up the next time it reads config (a restart is the simple way).
+
+The first launch copies `config.json` and `bots.json` from `~/.config/atla-office` when the new files are not there yet, so the Office, Filter, and Shared Compute switches carry over. The old directory is left in place. Chat history stays in `~/.local/share/atla-office/history` until a new history folder exists.
+
+`ATLAS_LAYER_CONFIG` points at a different directory. `ATLA_OFFICE_CONFIG` still works if the new variable is unset. Paths inside the config may be absolute, `~/...`, or relative to that directory.
+
+The switches, under `features`:
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `office` | `true` | Shows the room. Off leaves a status window and pauses the desk watchers. |
+| `filter` | `false` | Checks desk text with a local word list. Off stops scanning. No hosts or DNS change. |
+| `sharedCompute` | `false` | Runs a capped local Roleplay sim tick when idle and plugged in. Off stops it. |
+
+A config written before these keys existed still loads. Missing switches use the defaults above, and saving a switch does not drop unknown fields.
+
+The starter paths are:
+
+| Key | Default |
+| --- | --- |
+| `paths.todo` | `~/Atla/AI/todo.json` |
+| `paths.today` | `~/Atla/AI/atla-today.json` |
+| `paths.dashboard` | `~/Atla/AI/dashboard.json` |
+| `paths.personality` | `~/Atla/AI/personality.md` |
+| `paths.inboxDir` | `~/Atla/AI/office-inbox` |
+| `paths.inboxFile` | empty. Set this to tail a JSONL file as well as, or instead of, the directory. |
+| `paths.historyDir` | empty, which means `$XDG_DATA_HOME/atlas-layer/history` (or the older `atla-office` history folder, if that is the only one) |
+
+The inbox directory is created on launch so the cloud side has somewhere to drop replies. The todo file is created only when you add an item. A missing today cache is ignored. A today cache that exists but is not JSON is reported and left untouched.
+
+`OLLAMA_HOST` overrides `ollama.baseUrl`. A value without a scheme gets `http://` in front, matching the Ollama convention.
+
+To try the sample board and a fake local model without touching `~/Atla`:
+
+```bash
+./scripts/demo.sh
+```
+
+The sample list is `examples/todo.json`. The demo also merges `examples/today.json`.
+
+## Desks
+
+`bots.json`:
+
+```json
+{
+  "bots": [
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "role": "Chief of staff",
+      "connector": "relay-webhook",
+      "accent": "#c45c3e",
+      "hair": "#241c17",
+      "accessory": "star"
+    }
+  ]
+}
+```
+
+`id` is the stable key (letters, numbers, hyphens, underscores, up to 64 characters). It is what the relay sends in `bot`, and it is the history filename. `connector` is one of:
+
+- `local-window` — the local Atlas window. The seed desk Local Atlas uses this. `local-ollama` is still available if you point a desk back at a model.
+- `local-ollama` — a model on this machine. Optional `model` (default `qwen3:8b`) and `systemPrompt`.
+- `relay-webhook` — Atlas and the other cloud desks. They all post to the same URL. The `bot` field is the router.
+- `cursor-agents` — a Cursor cloud agent. Optional `agentId`. If it is empty, a unique name match from the API is used in memory. Pinning one from the chat writes `agentId` back and leaves every other field alone.
+- `echo` — a local fake, for demos.
+
+The seed list is Atlas, Products, Consumed, Creation, Covenant, Wellness, Modified, Devon, Local Atlas, Atlas site, and Roleplay. Colors and accessories are optional. Unknown connector names are skipped and reported.
+
+## Whiteboard
+
+`paths.dashboard` (`~/Atla/AI/dashboard.json`) is the productivity home Atlas keeps updated. Layer only reads it. Bills (with due dates), replies waiting on you, and decisions you owe show as a short line on the wall board and in full when you click the board. Unknown fields are ignored. A missing file is an empty home. A file that is not JSON is reported and left untouched.
+
+```json
+{
+  "updated": "Mon Nov 16 2026, 4:00 AM PT",
+  "bills": [{ "name": "Registered agent", "amount": "$50.00", "due": "2026-11-20", "paid": false }],
+  "replies": [{ "from": "Atlas", "text": "Need a yes", "since": "2026-11-15" }],
+  "decisions": [{ "title": "Keep the home in Layer", "detail": "The old page is retired", "due": "2026-11-16" }]
+}
+```
+
+The board shows `paths.todo`, then any items from `paths.today` whose id is not already on the todo list. Checking a today-only item copies it into `todo.json` and flips it there. The today file is never written. A task with `today: true` is today's priority: a filled red dot, sorted ahead of the others. Every other task gets a hollow dot.
+
+When `paths.today` has a `metrics` array, the board draws those as tiles (a large value over a small label). `bad: true` values are red. The `focus` string is hidden in that case, because it repeats the tiles. `updated` is shown in small type at the bottom. Unknown fields on the file, the metrics, and the tasks are left alone. On the small wall board, tiles wrap and long titles are cut to fit.
+
+Accepted todo shapes, both for the todo file and the today cache:
+
+- a JSON array of items
+- an object with an `items`, `todos`, `tasks`, or `list` array
+- nested arrays of task objects, for a dashboard cache
+
+An item is an object with a text field (`text`, `title`, `content`, `task`, `name`, or `label`) and an optional done field (`done`, `completed`, `checked`, or `complete`). A bare string is also an item. Unknown fields are kept. On save, the file is rewritten as two-space JSON with the original key order, so a sibling field like `"room"` stays put. If the file is not valid JSON, the app reports that and does not write.
+
+## Chat
+
+Click a bot. They walk back to their desk, and the speech cloud above their head opens into that desk's full thread: every line, in order, with a composer. The cloud stays on that bot and follows them. A short cloud above the other bots shows their latest line. The right-hand chat column is gone.
+
+Bots wander the floor on a 16-pixel grid, between their desk and the front of the whiteboard. While a desk is working, or while its cloud is open, that bot stands at the desk. The walk pauses when the window is hidden and when the system asks for reduced motion.
+
+The mailbox and the desk phone are objects in the room. There is no app list. Click the tray and Layer opens a window on `mail.google.com` for `account@atla-o.com` (other accounts already signed in stay in Google's switcher). Click the phone and the same kind of window opens `voice.google.com`. If Thunderbird is installed, the tray opens that instead. Signal and Discord get an object only when they are installed, and the object starts that app. Cookies stay in the webview's own data directory. Layer does not ask for or store a password. A red count is drawn on the tray or the phone only when that page's title includes a number, such as `(3) Inbox - Gmail`.
+
+Messages are appended to `history/<id>.jsonl` as one JSON object per line:
+
+```json
+{"id":"m-…","role":"user","text":"…","ts":"2026-11-12T08:00:00Z","read":true}
+```
+
+`role` is `user`, `assistant`, or `system`. Reopening a desk shows that history. A lamp turns cream when an assistant line is still unread.
+
+What you send and what the bot sends back are the same text in both places: the desk log, and the relay, Cursor transcript, or local model context. Both sides are written to that desk's history. A line that arrives twice is kept once.
+
+## Connectors
+
+Each connector is a Rust `BotConnector` with an adapter behind it (`OllamaConnector`, `RelayConnector`, `CursorConnector`, `EchoConnector`). The desk's `connector` field picks the adapter.
+
+### local-window
+
+The Local Atlas desk. On send, Layer writes the message text to `config.localWindow.inboxDir` (default `~/Atla/AI/inbox`) as `layer-<message id>.md`, via a `.tmp` file renamed into place. The window only picks up `*.md`. If no process named `atlas-window` is running, Layer starts one and does not wait on it: `gtk-launch atlas-window`, then `~/bin/atlas-window`. Set `config.localWindow.launchCommand` to replace both of those (a program and args separated by spaces).
+
+The window keeps its own chat. Layer reads that log directly from `config.localWindow.historyDir` (default `~/Atla/AI/window-history`) as `{bot id}.jsonl`, one JSON object per line (`role`, `text`, `id`, `ts`). New lines show up on the desk without anyone pasting them back. A reply the window still drops in the office inbox as `{"bot":"local-atlas","text":"…","in_reply_to":"<message id>"}` is stored too, and a line that arrives both ways is kept once.
+
+`local-ollama` is unchanged. Point a desk at it when you want the model instead of the window.
+
+### local-ollama
+
+`POST {baseUrl}/api/chat` with `stream: true`, the model (`qwen3:8b` unless the desk or `ollama.model` says otherwise), and the recent history. If `paths.personality` exists it is sent as the system message, unless the desk sets `systemPrompt`. Tokens are the `message.content` fields. `message.thinking` is shown only when the model never produced content.
+
+If Ollama cannot be reached and `ollama.echoIfUnavailable` is true, or `ATLAS_LAYER_ECHO=1` (or the older `ATLA_OFFICE_ECHO=1`), the desk answers in echo mode and says so. A model that is missing on a server that is up is reported as an error, not echoed.
+
+### Live files for Atlas
+
+Atlas's Grok Bot chat is mirrored as files in `paths.inboxDir` (`~/Atla/AI/office-inbox`). A file named `{desk}-*.json` stays in that folder. Layer watches the directory and reads it again every couple of seconds. Each file is either one message or a transcript:
+
+```json
+{
+  "bot": "atlas",
+  "messages": [
+    {"id": "m-1", "role": "user", "text": "What is on the board?", "ts": "2026-11-16T08:00:00Z"},
+    {"id": "m-2", "role": "assistant", "text": "Three bills, two replies.", "ts": "2026-11-16T08:00:04Z", "in_reply_to": "m-1"}
+  ]
+}
+```
+
+Files are read in name order, then array order. Every entry is appended to that desk's history and shown in the speech cloud. The same id is not stored twice. A file without a hyphen, such as `one.json`, is still a one-shot inbox reply and is moved to `processed/` after it is handled.
+
+Cursor desks are read the same way from the agent conversation API while that desk is open (and on the slower poll for every Cursor desk). The local Atlas window is read from its jsonl log. `relay-webhook` remains the fallback for a bot with no history file and no conversation API: Layer still posts `desk`, `id`, and the full `text`, and inbox replies with `in_reply_to` thread under that message. `local-ollama` and `echo` only exist inside Layer.
+
+### relay-webhook
+
+Used for Atlas and every other cloud desk that has no native transcript. One URL, one auth header. The desk id is the route.
+
+`POST` JSON:
+
+```json
+{
+  "bot": "products",
+  "desk": "products",
+  "id": "m-…",
+  "text": "Sketch the shelf",
+  "reply_to_id": "m-…"
+}
+```
+
+`desk` and `bot` are the desk id. `id` and `reply_to_id` are the user message id. `text` is the full message. That is enough to copy the same line into the Grok Bot chat. Send the reply back with `in_reply_to` set to that id. The desk stores it and shows it threaded under that message.
+
+The URL is `relay.url`, unless `relay.urlEnv` (default `ATLAS_LAYER_WEBHOOK_URL`) is set. The Authorization value is `relay.authEnv` (default `ATLAS_LAYER_WEBHOOK_AUTH`) or, if that is empty, the keyring account `relay.authKeyringAccount` (default `webhook-auth`). A value with no space is sent as `Bearer <value>`. `Bearer …` and `Basic …` are sent as written. The header is omitted when no secret is set. A config carried over from `~/.config/atla-office` keeps the env var names it already had.
+
+There is no field in the config for the token itself.
+
+The desk stores your message before the POST, so the history and the relay carry the same text. If the response body is the reply (`text`, `reply`, `content`, `message`, or plain text that is not just `ok`), that reply is shown on the desk and appended to history. An empty body or a bare acknowledgement stays open for the inbox, which is how a reply that arrives later still lands in the same history. A reply that shows up in both the response and the inbox is stored once.
+
+Directory (`paths.inboxDir`), one JSON file per reply. The app moves a handled file to `processed/` and a file it cannot parse, or whose `bot` matches no desk, to `unmatched/`:
+
+```json
+{
+  "bot": "atlas",
+  "text": "Morning. The board is up.",
+  "in_reply_to": "m-…",
+  "ts": "2026-11-12T08:00:00Z"
+}
+```
+
+`bot` may be the desk id or the display name. `in_reply_to` and `ts` are optional. Extra fields are ignored. `ts` should be ISO-8601.
+
+Or a JSONL file (`paths.inboxFile`), one object per line, same shape. The app tails it and remembers the byte offset. A partial last line is left for the next write.
+
+An example file is `examples/inbox-sample/atlas.json`. You can drop a copy in the inbox to see the lamp change.
+
+### cursor-agents
+
+[Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) v1, with the v0 conversation endpoint for history (v1 has runs and a stream, not a transcript).
+
+The key is `cursor.apiKeyEnv` (default `CURSOR_API_KEY`) or keyring account `cursor.apiKeyKeyringAccount` (default `cursor-api-key`). It is sent as `Authorization: Bearer <key>`, or as Basic if `cursor.auth` is `"basic"`. Store it with:
+
+```bash
+printf '%s' "$CURSOR_API_KEY" | secret-tool store \
+  --label='Atlas Layer Cursor API key' \
+  service atlas-layer \
+  account cursor-api-key
+```
+
+The webhook token uses the same service and account `webhook-auth`. A key stored earlier under service `atla-office` is still read. Env vars win over the keyring, which is useful for a shell and for tests. `secret-tool` is in Fedora's `libsecret` package. If the lookup takes more than two seconds it is abandoned, so a missing daemon cannot stall the app.
+
+Calls:
+
+- `GET /v1/agents` — list, status, and name matching
+- `POST /v1/agents/{id}/runs` with `{ "prompt": { "text": "…" } }` — follow-up
+- `GET /v1/agents/{id}/runs/{runId}/stream` — assistant text as it arrives
+- `GET /v0/agents/{id}/conversation` — the remote transcript. Opening the desk, finishing a follow-up, and the agent poll each copy any line the desk does not already have into `history/<id>.jsonl` and show it. A line you already sent or received is linked, not duplicated.
+- `GET /v1/agents/{id}` and `GET /v1/agents/{id}/runs/{latestRunId}` — fallback when v0 has no transcript
+
+Status `ACTIVE` lights the lamp amber, unless a reply is already unread. The list is refreshed about once a minute (`cursor.pollSeconds`, minimum 15; `0` turns it off) and only if a key is present.
+
+## Idle
+
+The canvas timer is 500ms and stops when the window is hidden, blurred, or reduced motion is on. File watches use inotify. The Cursor poll is a single list call on a slow interval. Nothing busy-loops, and secrets are never logged. Errors that come back from a server are scrubbed if they echo a key.
+
+## Develop
+
+```bash
+npm install
+cargo test --manifest-path src-tauri/Cargo.toml
+npm run tauri dev
+```
+
+The dev window loads Vite at <http://127.0.0.1:47331>. Opening that URL in a browser shows the same room with an in-memory echo, labeled as a preview. The desktop window is the one wired to the connectors.
+
+`node scripts/gen-icon.mjs` writes the desktop icons and `src-tauri/icons/icon.png`. Tauri embeds that file at compile time. `cargo build` runs the script when the icon is not already there, so a fresh clone does not stop on a missing `icons/icon.png`.
+
+`cargo test` covers the whiteboard round-trip (unknown fields kept, a broken file not overwritten), the relay body and Authorization header, Ollama streaming, the Cursor list / follow-up / conversation against a mock, and the inbox directory and JSONL tail.
+
+## Layout
+
+```
+src/                  canvas office, chat, whiteboard
+src-tauri/src/        config, history, inbox, connectors
+assets/defaults/      seed config and desks
+examples/             sample todo, today cache, personality, inbox file
+scripts/install.sh    ~/.local install
+packaging/            .desktop template and the O mark icon
+src-tauri/icons/      window icon embedded by Tauri (`icon.png`)
+```
