@@ -95,6 +95,22 @@ export type StationSpot = {
   label: string;
 };
 
+export type RoomThing = {
+  id: string;
+  kind: "folder" | "paper" | "cartridge" | "disc" | string;
+  place: string;
+  label: string;
+  app: string;
+  target: string;
+};
+
+export type ShowHit = {
+  id: string;
+  kind: string;
+  name: string;
+  year: string;
+};
+
 export type StationApp = {
   id: string;
   label: string;
@@ -142,6 +158,8 @@ export type OfficeSnapshot = {
   };
   comms: CommObject[];
   stations: StationSpot[];
+  things: RoomThing[];
+  stremio: boolean;
 };
 
 export type RemoteAgent = {
