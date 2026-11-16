@@ -8,6 +8,7 @@ pub mod config;
 pub mod connectors;
 pub mod dashboard;
 pub mod filter;
+pub mod finder;
 pub mod history;
 pub mod inbox;
 pub mod model;
