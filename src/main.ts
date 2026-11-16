@@ -1,10 +1,11 @@
-import { loadOffice, onOfficeEvent, openComms, watchFocus, watchOffice } from "./bridge";
+import { loadOffice, onOfficeEvent, openComms, openThing, watchFocus, watchOffice } from "./bridge";
 import { OfficeScene } from "./office/scene";
 import type { CommObject, OfficeEvent, OfficeSnapshot } from "./types";
 import { Board } from "./ui/board";
 import { ChatPanel } from "./ui/chat";
 import { SettingsPanel } from "./ui/settings";
 import { StationPanel } from "./ui/station";
+import { TvFinder } from "./ui/tv";
 
 const banner = document.querySelector<HTMLElement>("#banner")!;
 const note = document.querySelector<HTMLElement>("#floor-note")!;
@@ -33,16 +34,20 @@ const scene = new OfficeScene(
   () => board.open(),
   (point) => chat.place(point),
   (id) => {
-    if (id === "cad" || id === "easel" || id === "arcade" || id === "tv" || id === "files" || id === "shelf") {
-      void stations.open(id);
-      return;
+    if (id === "mail" || id === "voice" || id === "signal" || id === "discord") {
+      void openComms(id).catch((error: unknown) => {
+        showBanner(error instanceof Error ? error.message : "That did not open.", "error");
+      });
     }
-    void openComms(id).catch((error: unknown) => {
+  },
+  (thing) => {
+    void openThing(thing.app, thing.target).catch((error: unknown) => {
       showBanner(error instanceof Error ? error.message : "That did not open.", "error");
     });
   },
 );
 const stations = new StationPanel();
+const tv = new TvFinder(() => scene.screenBox("tv"), (message) => showBanner(message, "error"));
 const settings = new SettingsPanel((next) => applySnapshot(next));
 
 let officeOn = true;
@@ -55,6 +60,8 @@ function applySnapshot(next: OfficeSnapshot) {
   document.title = "Atlas Layer";
   scene.setBots(next.bots, next.statuses);
   scene.setComms(objectsOnTheFloor(next));
+  scene.setThings(next.things ?? []);
+  tv.sync(Boolean(next.stremio) && (next.stations ?? []).some((spot) => spot.id === "tv"));
   if (next.preview) {
     scene.setLine("atlas", "Three bills, two replies waiting, and one decision about the shelf.");
     scene.setLine("products", "Shelf sketch is on the desk.");
@@ -84,7 +91,6 @@ const PLATE: Record<string, string> = {
   arcade: "Arcade",
   tv: "TV",
   files: "Files",
-  shelf: "Shelf",
 };
 
 function objectsOnTheFloor(next: OfficeSnapshot): CommObject[] {
@@ -162,6 +168,15 @@ tickClock();
 window.setInterval(tickClock, 30_000);
 
 document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    const typing = document.activeElement instanceof HTMLInputElement
+      || document.activeElement instanceof HTMLTextAreaElement;
+    if (!typing) {
+      event.preventDefault();
+      void stations.open("shelf");
+    }
+    return;
+  }
   if (event.key !== "Escape") return;
   const dialog = document.querySelector<HTMLDialogElement>("#board-dialog")!;
   const stationDialog = document.querySelector<HTMLDialogElement>("#station-dialog")!;

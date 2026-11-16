@@ -39,6 +39,11 @@
         <div id="floor">
           <canvas id="office" width="480" height="328" aria-label="The office. Choose a bot, the whiteboard, the mailbox, the phone, or a work bench."></canvas>
           <p id="floor-note" class="floor-note">Opening the office…</p>
+          <form id="tv-finder" hidden>
+            <label class="sr" for="tv-query">Movies and shows</label>
+            <input id="tv-query" placeholder="Movies and shows" autocomplete="off" />
+            <ul id="tv-results"></ul>
+          </form>
           <section id="chat" class="speech" hidden aria-labelledby="chat-name">
           <header class="chat-head">
             <span id="chat-swatch" class="swatch" aria-hidden="true"></span>
