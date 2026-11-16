@@ -112,12 +112,29 @@
       <form id="board-form" method="dialog">
         <header class="board-head">
           <div>
-            <h2 id="board-title">Whiteboard</h2>
+            <h2 id="board-title">Dashboard</h2>
             <p id="board-focus" hidden></p>
           </div>
           <button type="button" id="board-close" value="cancel">Close</button>
         </header>
         <div id="board-metrics" class="metrics" hidden></div>
+        <section class="dash" aria-labelledby="dash-bills-title">
+          <h3 id="dash-bills-title">Bills</h3>
+          <ul id="dash-bills"></ul>
+          <p id="dash-bills-empty" class="empty">No bills due.</p>
+        </section>
+        <section class="dash" aria-labelledby="dash-replies-title">
+          <h3 id="dash-replies-title">Replies waiting</h3>
+          <ul id="dash-replies"></ul>
+          <p id="dash-replies-empty" class="empty">No one is waiting on you.</p>
+        </section>
+        <section class="dash" aria-labelledby="dash-decisions-title">
+          <h3 id="dash-decisions-title">Decisions</h3>
+          <ul id="dash-decisions"></ul>
+          <p id="dash-decisions-empty" class="empty">No decision owed.</p>
+        </section>
+        <p id="dash-updated" class="path" hidden></p>
+        <h3 class="dash-board">Whiteboard</h3>
         <ul id="todo-list"></ul>
         <p id="todo-empty" class="empty" hidden>The board is clear.</p>
         <p id="todo-error" class="chat-warning" hidden></p>

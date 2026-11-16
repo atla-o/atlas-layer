@@ -36,9 +36,32 @@ export type ChatMessage = {
   inReplyTo?: string | null;
 };
 
+export type Bill = {
+  id: string;
+  name: string;
+  amount: string;
+  due: string;
+  paid: boolean;
+};
+
+export type WaitingReply = {
+  id: string;
+  from: string;
+  text: string;
+  since: string;
+};
+
+export type Decision = {
+  id: string;
+  title: string;
+  detail: string;
+  due: string;
+};
+
 export type OfficePaths = {
   todo: string;
   today: string;
+  dashboard: string;
   inbox: string;
   history: string;
   config: string;
@@ -68,6 +91,10 @@ export type OfficeSnapshot = {
   todayFocus: string | null;
   metrics: BoardMetric[];
   updated: string | null;
+  bills: Bill[];
+  replies: WaitingReply[];
+  decisions: Decision[];
+  dashboardUpdated: string | null;
   statuses: Record<string, string>;
   paths: OfficePaths;
   warnings: string[];
@@ -100,5 +127,6 @@ export type OfficeEvent =
   | { type: "accepted"; botId: string; messageId: string }
   | { type: "status"; botId: string; status: string }
   | { type: "todos"; todos: Todo[]; todayFocus: string | null; metrics: BoardMetric[]; updated: string | null }
+  | { type: "home"; bills: Bill[]; replies: WaitingReply[]; decisions: Decision[]; updated: string | null }
   | { type: "message"; botId: string; message: ChatMessage }
   | { type: "warning"; message: string };

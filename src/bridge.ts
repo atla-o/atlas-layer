@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import botsFile from "../assets/defaults/bots.json";
+import sampleDashboard from "../examples/dashboard.json";
 import sampleToday from "../examples/today.json";
 import sampleTodo from "../examples/todo.json";
 import type {
@@ -141,10 +142,15 @@ function freshPreview(): PreviewState {
       todayFocus: board.focus,
       metrics: board.metrics,
       updated: board.updated,
+      bills: sampleDashboard.bills,
+      replies: sampleDashboard.replies,
+      decisions: sampleDashboard.decisions,
+      dashboardUpdated: sampleDashboard.updated,
       statuses,
       paths: {
         todo: "examples/todo.json",
         today: "examples/today.json",
+        dashboard: "examples/dashboard.json",
         inbox: "~/Atla/AI/office-inbox",
         history: "browser preview",
         config: "browser preview",
@@ -178,6 +184,11 @@ function loadPreview(): PreviewState {
     };
     parsed.snapshot.metrics = parsed.snapshot.metrics ?? [];
     parsed.snapshot.updated = parsed.snapshot.updated ?? null;
+    parsed.snapshot.bills = parsed.snapshot.bills ?? [];
+    parsed.snapshot.replies = parsed.snapshot.replies ?? [];
+    parsed.snapshot.decisions = parsed.snapshot.decisions ?? [];
+    parsed.snapshot.dashboardUpdated = parsed.snapshot.dashboardUpdated ?? null;
+    parsed.snapshot.paths.dashboard = parsed.snapshot.paths.dashboard ?? "examples/dashboard.json";
     parsed.snapshot.todos = parsed.snapshot.todos.map((item) => ({ ...item, today: Boolean(item.today) }));
     return parsed;
   } catch {

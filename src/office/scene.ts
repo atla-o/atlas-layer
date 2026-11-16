@@ -13,6 +13,7 @@ export class OfficeScene {
   private metrics: BoardMetric[] = [];
   private updated: string | null = null;
   private focus: string | null = null;
+  private homeLine = "";
   private selectedId: string | null = null;
   private reduceMotion: boolean;
 
@@ -45,11 +46,18 @@ export class OfficeScene {
     this.draw();
   }
 
-  setBoard(todos: Todo[], metrics: BoardMetric[], updated: string | null, focus: string | null) {
+  setBoard(
+    todos: Todo[],
+    metrics: BoardMetric[],
+    updated: string | null,
+    focus: string | null,
+    homeLine = "",
+  ) {
     this.todos = todos;
     this.metrics = metrics;
     this.updated = updated;
     this.focus = focus;
+    this.homeLine = homeLine;
     this.draw();
   }
 
@@ -76,6 +84,7 @@ export class OfficeScene {
       metrics: this.metrics,
       updated: this.updated,
       focus: this.focus,
+      homeLine: this.homeLine,
       selectedId: this.selectedId,
       frame: this.frame,
     };

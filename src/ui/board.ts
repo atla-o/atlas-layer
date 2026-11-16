@@ -1,11 +1,15 @@
 import { addTodo, toggleTodo } from "../bridge";
-import type { BoardMetric, OfficeSnapshot, Todo } from "../types";
+import type { Bill, BoardMetric, Decision, OfficeSnapshot, Todo, WaitingReply } from "../types";
 
 export class Board {
   private todos: Todo[] = [];
   private focus: string | null = null;
   private metrics: BoardMetric[] = [];
   private updated: string | null = null;
+  private bills: Bill[] = [];
+  private replies: WaitingReply[] = [];
+  private decisions: Decision[] = [];
+  private dashboardUpdated: string | null = null;
   private path = "";
   private busy = false;
 
@@ -24,6 +28,10 @@ export class Board {
     this.focus = snapshot.metrics.length ? null : snapshot.todayFocus;
     this.metrics = snapshot.metrics;
     this.updated = snapshot.updated;
+    this.bills = snapshot.bills ?? [];
+    this.replies = snapshot.replies ?? [];
+    this.decisions = snapshot.decisions ?? [];
+    this.dashboardUpdated = snapshot.dashboardUpdated ?? null;
     this.path = snapshot.paths.todo;
     this.render();
   }
@@ -55,6 +63,36 @@ export class Board {
     const updated = document.querySelector<HTMLElement>("#board-updated")!;
     updated.hidden = !this.updated;
     updated.textContent = this.updated ?? "";
+    fillDash(
+      "#dash-bills",
+      "#dash-bills-empty",
+      this.bills.map((bill) => ({
+        title: `${bill.name} · ${bill.amount}`,
+        meta: bill.due ? `Due ${bill.due}` : "",
+        paid: bill.paid,
+      })),
+    );
+    fillDash(
+      "#dash-replies",
+      "#dash-replies-empty",
+      this.replies.map((reply) => ({
+        title: reply.text,
+        meta: reply.since ? `${reply.from} · since ${reply.since}` : reply.from,
+        paid: false,
+      })),
+    );
+    fillDash(
+      "#dash-decisions",
+      "#dash-decisions-empty",
+      this.decisions.map((item) => ({
+        title: item.title,
+        meta: [item.detail, item.due ? `Due ${item.due}` : ""].filter(Boolean).join(" · "),
+        paid: false,
+      })),
+    );
+    const dashUpdated = document.querySelector<HTMLElement>("#dash-updated")!;
+    dashUpdated.hidden = !this.dashboardUpdated;
+    dashUpdated.textContent = this.dashboardUpdated ? `Dashboard updated ${this.dashboardUpdated}` : "";
     document.querySelector("#todo-path")!.textContent = this.path
       ? `Saved to ${this.path}. Items from the today cache are copied in when you check them.`
       : "";
@@ -124,5 +162,27 @@ export class Board {
     const node = document.querySelector<HTMLElement>("#todo-error")!;
     node.hidden = !text;
     node.textContent = text;
+  }
+}
+
+function fillDash(
+  listId: string,
+  emptyId: string,
+  rows: { title: string; meta: string; paid: boolean }[],
+) {
+  const list = document.querySelector<HTMLUListElement>(listId)!;
+  const empty = document.querySelector<HTMLElement>(emptyId)!;
+  list.replaceChildren();
+  empty.hidden = rows.length > 0;
+  for (const row of rows) {
+    const li = document.createElement("li");
+    const title = document.createElement("span");
+    title.className = row.paid ? "paid" : "";
+    title.textContent = row.title;
+    const meta = document.createElement("span");
+    meta.className = "when";
+    meta.textContent = row.meta;
+    li.append(title, meta);
+    list.append(li);
   }
 }

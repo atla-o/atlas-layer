@@ -1,0 +1,36 @@
+{
+  "updated": "Mon Nov 16 2026, 4:00 AM PT",
+  "keeper": "Atlas updates this file. Layer only reads it.",
+  "bills": [
+    {
+      "id": "agent",
+      "name": "Northwest Registered Agent",
+      "amount": "$50.00",
+      "due": "2026-11-20",
+      "paid": false
+    },
+    {
+      "id": "host",
+      "name": "Hosting",
+      "amount": "$12.00",
+      "due": "2026-12-01",
+      "paid": true
+    }
+  ],
+  "replies": [
+    {
+      "id": "atlas-yes",
+      "from": "Atlas",
+      "text": "Need a yes on the shelf sketch",
+      "since": "2026-11-15"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "home",
+      "title": "Keep the dashboard in Layer",
+      "detail": "The old page is retired",
+      "due": "2026-11-16"
+    }
+  ]
+}

@@ -81,6 +81,7 @@ export type SceneFrame = {
   metrics: BoardMetric[];
   updated: string | null;
   focus: string | null;
+  homeLine: string;
   selectedId: string | null;
   frame: number;
 };
@@ -160,6 +161,10 @@ function paintBoard(ctx: CanvasRenderingContext2D, scene: SceneFrame) {
     cursor = paintMetrics(ctx, scene.metrics, x + 4, cursor, w - 8, bottom);
   } else if (scene.focus) {
     drawText(ctx, fitText(scene.focus, w - 10), x + 4, cursor, WOOD);
+    cursor += 8;
+  }
+  if (scene.homeLine) {
+    drawText(ctx, fitText(scene.homeLine, w - 10), x + 4, cursor, TERRA);
     cursor += 8;
   }
   const open = scene.todos.filter((item) => !item.done);

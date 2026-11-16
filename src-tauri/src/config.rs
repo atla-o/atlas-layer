@@ -45,6 +45,7 @@ pub struct OfficeCfg {
 pub struct PathsCfg {
     pub todo: String,
     pub today: String,
+    pub dashboard: String,
     pub personality: String,
     pub inbox_dir: String,
     pub inbox_file: String,
@@ -122,6 +123,7 @@ impl Default for PathsCfg {
         Self {
             todo: "~/Atla/AI/todo.json".into(),
             today: "~/Atla/AI/atla-today.json".into(),
+            dashboard: "~/Atla/AI/dashboard.json".into(),
             personality: "~/Atla/AI/personality.md".into(),
             inbox_dir: "~/Atla/AI/office-inbox".into(),
             inbox_file: String::new(),
@@ -176,6 +178,7 @@ impl Default for CursorCfg {
 pub struct ResolvedPaths {
     pub todo: PathBuf,
     pub today: PathBuf,
+    pub dashboard: PathBuf,
     pub personality: PathBuf,
     pub inbox_dir: PathBuf,
     pub inbox_file: Option<PathBuf>,
@@ -200,6 +203,7 @@ pub struct OfficeData {
     pub paths: ResolvedPaths,
     pub jsonl_offset: u64,
     pub last_todo_sig: String,
+    pub last_dash_sig: String,
     pub last_board_note: String,
 }
 
@@ -289,6 +293,7 @@ pub fn load_office(config_dir: &Path) -> OfficeData {
     let last_todo_sig = todos::view(&paths.todo, &paths.today)
         .map(|view| view.signature())
         .unwrap_or_default();
+    let last_dash_sig = crate::dashboard::load(&paths.dashboard).signature();
 
     eprintln!(
         "[atlas-layer] config {} · {} desks",
@@ -314,6 +319,7 @@ pub fn load_office(config_dir: &Path) -> OfficeData {
         paths,
         jsonl_offset,
         last_todo_sig,
+        last_dash_sig,
         last_board_note: String::new(),
     }
 }
@@ -579,6 +585,7 @@ pub fn resolve_paths(config_dir: &Path, config: &AppConfig) -> ResolvedPaths {
     ResolvedPaths {
         todo: resolve_against(config_dir, &config.paths.todo),
         today: resolve_against(config_dir, &config.paths.today),
+        dashboard: resolve_against(config_dir, &config.paths.dashboard),
         personality: resolve_against(config_dir, &config.paths.personality),
         inbox_dir: resolve_against(config_dir, &config.paths.inbox_dir),
         inbox_file,
