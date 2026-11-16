@@ -1486,7 +1486,7 @@ mod event_shape {
         let json = serde_json::to_string(&event).unwrap();
         assert_eq!(
             json,
-            r#"{"type":"status","botId":"atlas","status":"message"}" #
+            r#"{"type":"status","botId":"atlas","status":"message"}"#
         );
     }
 }
