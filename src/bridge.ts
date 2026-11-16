@@ -13,6 +13,7 @@ import type {
   OpenedChat,
   RemoteAgent,
   ServiceReport,
+  StationDetail,
   Todo,
 } from "./types";
 
@@ -167,6 +168,7 @@ function freshPreview(): PreviewState {
         { id: "mail", label: "Mail", mode: "window" },
         { id: "voice", label: "Phone", mode: "window" },
       ],
+      stations: [],
     },
     history: {
       atlas: [
@@ -206,6 +208,7 @@ function loadPreview(): PreviewState {
     parsed.snapshot.decisions = parsed.snapshot.decisions ?? [];
     parsed.snapshot.dashboardUpdated = parsed.snapshot.dashboardUpdated ?? null;
     parsed.snapshot.paths.dashboard = parsed.snapshot.paths.dashboard ?? "examples/dashboard.json";
+    parsed.snapshot.stations = parsed.snapshot.stations ?? [];
     parsed.snapshot.comms = parsed.snapshot.comms?.length
       ? parsed.snapshot.comms
       : [
@@ -348,6 +351,20 @@ export async function bindCursorAgent(botId: string, agentId: string): Promise<B
     return { ...bot };
   }
   return invoke<Bot>("bind_cursor_agent", { botId, agentId });
+}
+
+export async function stationDetail(id: string): Promise<StationDetail> {
+  if (!inTauri()) {
+    throw new Error("Benches, the easel, the arcade, and the TV launch installed apps from Atlas Layer.");
+  }
+  return invoke<StationDetail>("station_detail", { id });
+}
+
+export async function launchTool(appId: string, file?: string): Promise<void> {
+  if (!inTauri()) {
+    throw new Error("That app launches from Atlas Layer.");
+  }
+  await invoke("launch_tool", { appId, file: file ?? null });
 }
 
 export async function openComms(id: string): Promise<void> {
