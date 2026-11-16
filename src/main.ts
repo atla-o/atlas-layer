@@ -40,7 +40,7 @@ function applySnapshot(next: OfficeSnapshot) {
   document.querySelector("#title")!.textContent = "Atlas Layer";
   document.title = "Atlas Layer";
   scene.setBots(next.bots, next.statuses);
-  scene.setBoard(next.todos, next.metrics, next.updated, next.todayFocus);
+  scene.setBoard(next.todos, next.metrics, next.updated, next.todayFocus, homeLine(next));
   board.set(next);
   settings.render(next);
   note.hidden = true;
@@ -55,6 +55,16 @@ function applySnapshot(next: OfficeSnapshot) {
   if (next.preview) showBanner("Browser preview. The installed app is the one that reaches Ollama, the relay, and Cursor.", "preview");
   else if (next.warnings.length) showBanner(next.warnings[0], "error");
   else hideBanner();
+}
+
+function homeLine(snapshot: OfficeSnapshot): string {
+  const bills = snapshot.bills.filter((bill) => !bill.paid).length;
+  const parts = [
+    bills ? `${bills} BILL${bills === 1 ? "" : "S"}` : "",
+    snapshot.replies.length ? `${snapshot.replies.length} REPL${snapshot.replies.length === 1 ? "Y" : "IES"}` : "",
+    snapshot.decisions.length ? `${snapshot.decisions.length} DECISION${snapshot.decisions.length === 1 ? "" : "S"}` : "",
+  ].filter(Boolean);
+  return parts.join("  ");
 }
 
 function showBanner(text: string, kind: "error" | "preview") {
@@ -78,7 +88,14 @@ function onEvent(event: OfficeEvent) {
     snapshot.todayFocus = event.todayFocus;
     snapshot.metrics = event.metrics;
     snapshot.updated = event.updated;
-    scene.setBoard(event.todos, event.metrics, event.updated, event.todayFocus);
+    scene.setBoard(event.todos, event.metrics, event.updated, event.todayFocus, homeLine(snapshot));
+    board.set(snapshot);
+  } else if (event.type === "home") {
+    snapshot.bills = event.bills;
+    snapshot.replies = event.replies;
+    snapshot.decisions = event.decisions;
+    snapshot.dashboardUpdated = event.updated;
+    scene.setBoard(snapshot.todos, snapshot.metrics, snapshot.updated, snapshot.todayFocus, homeLine(snapshot));
     board.set(snapshot);
   } else if (event.type === "warning") {
     showBanner(event.message, "error");
