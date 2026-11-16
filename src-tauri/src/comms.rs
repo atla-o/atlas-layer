@@ -110,14 +110,14 @@ pub fn plan(host: &Host, id: &str) -> Result<OpenPlan, String> {
             } else {
                 Ok(OpenPlan::Web {
                     window: "mail".into(),
-                    title: "Atlas Layer \u2014 Mail".into(),
+                    title: "Atlas Layer — Mail".into(),
                     url: MAIL_URL.into(),
                 })
             }
         }
         "voice" => Ok(OpenPlan::Web {
             window: "voice".into(),
-            title: "Atlas Layer \u2014 Phone".into(),
+            title: "Atlas Layer — Phone".into(),
             url: VOICE_URL.into(),
         }),
         "signal" => native(host, &SIGNAL)
