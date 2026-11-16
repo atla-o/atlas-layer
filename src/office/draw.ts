@@ -3,7 +3,7 @@ import type { Dir } from "./walk";
 import { drawText, fitText, textWidth } from "./font";
 
 export const WORLD_W = 480;
-export const WORLD_H = 276;
+export const WORLD_H = 328;
 
 const INK = "#241c17";
 const WALL = "#eadcc8";
@@ -39,6 +39,10 @@ const COMM_SPOTS: Record<string, CommRect> = {
   voice: { x: 434, y: 188, w: 42, h: 34 },
   signal: { x: 72, y: 248, w: 52, h: 24 },
   discord: { x: 132, y: 248, w: 56, h: 24 },
+  cad: { x: 8, y: 286, w: 108, h: 38 },
+  easel: { x: 128, y: 286, w: 88, h: 38 },
+  arcade: { x: 228, y: 286, w: 96, h: 38 },
+  tv: { x: 348, y: 286, w: 120, h: 38 },
 };
 
 export function commRect(id: string): CommRect | null {
@@ -194,7 +198,11 @@ function paintComm(ctx: CanvasRenderingContext2D, comm: CommActor) {
   if (comm.id === "mail") paintTray(ctx, spot.x + 4, spot.y);
   else if (comm.id === "voice") paintPhone(ctx, spot.x + 6, spot.y);
   else if (comm.id === "signal") paintNote(ctx, spot.x + 2, spot.y);
-  else paintSpeaker(ctx, spot.x + 2, spot.y);
+  else if (comm.id === "discord") paintSpeaker(ctx, spot.x + 2, spot.y);
+  else if (comm.id === "cad") paintBench(ctx, spot.x + 8, spot.y);
+  else if (comm.id === "easel") paintEasel(ctx, spot.x + 28, spot.y);
+  else if (comm.id === "arcade") paintCabinet(ctx, spot.x + 30, spot.y);
+  else if (comm.id === "tv") paintTv(ctx, spot.x + 36, spot.y);
   const plateY = spot.y + spot.h - 11;
   px(ctx, spot.x, plateY, spot.w, 11, WOOD_DK);
   px(ctx, spot.x + 1, plateY + 1, spot.w - 2, 9, "#f3eadc");
@@ -236,6 +244,46 @@ function paintNote(ctx: CanvasRenderingContext2D, x: number, y: number) {
   px(ctx, x + 6, y + 4, 10, 1, WOOD);
   px(ctx, x + 6, y + 7, 8, 1, WOOD);
   disc(ctx, x + 16, y + 9, 3, TERRA);
+}
+
+function paintBench(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x, y + 14, 72, 8, WOOD);
+  px(ctx, x, y + 14, 72, 2, WOOD_LT);
+  px(ctx, x + 4, y + 22, 4, 4, WOOD_DK);
+  px(ctx, x + 64, y + 22, 4, 4, WOOD_DK);
+  px(ctx, x + 6, y + 6, 22, 8, PAPER);
+  px(ctx, x + 8, y + 8, 14, 1, INK);
+  px(ctx, x + 8, y + 11, 10, 1, WOOD);
+  px(ctx, x + 36, y + 2, 16, 12, INK);
+  px(ctx, x + 38, y + 4, 12, 8, "#d7e4ef");
+  px(ctx, x + 56, y + 8, 10, 6, CREAM);
+  px(ctx, x + 58, y + 8, 8, 2, TERRA);
+}
+
+function paintEasel(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x + 14, y + 2, 2, 22, WOOD_DK);
+  px(ctx, x + 2, y + 8, 26, 2, WOOD);
+  px(ctx, x + 4, y, 20, 16, PAPER);
+  px(ctx, x + 6, y + 3, 8, 6, SAGE);
+  px(ctx, x + 14, y + 6, 6, 6, TERRA);
+}
+
+function paintCabinet(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x, y, 28, 24, WOOD_DK);
+  px(ctx, x + 3, y + 3, 22, 12, INK);
+  px(ctx, x + 5, y + 5, 18, 8, "#3d6b8a");
+  px(ctx, x + 6, y + 17, 4, 3, TERRA);
+  px(ctx, x + 14, y + 17, 4, 3, SAGE);
+  px(ctx, x + 8, y + 22, 12, 2, WOOD);
+}
+
+function paintTv(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  px(ctx, x, y + 2, 40, 18, INK);
+  px(ctx, x + 3, y + 5, 34, 12, "#1e3344");
+  px(ctx, x + 6, y + 8, 10, 6, TERRA);
+  px(ctx, x + 18, y + 8, 8, 4, CREAM);
+  px(ctx, x + 16, y + 20, 8, 3, WOOD_DK);
+  px(ctx, x + 8, y + 23, 24, 2, WOOD);
 }
 
 function paintSpeaker(ctx: CanvasRenderingContext2D, x: number, y: number) {
